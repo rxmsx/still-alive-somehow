@@ -462,7 +462,10 @@ func create_tree(index: int, biome := BIOME_FOREST) -> Node3D:
 	var tree := StaticBody3D.new()
 	tree.name = "Tree_%02d" % (index + 1)
 	tree.add_to_group("trees")
-	setup_resource(tree, "wood", "Baum", rng.randi_range(2, 4), rng.randi_range(3, 5), "axe", true)
+	setup_resource(tree, "wood", "Baum", 0, rng.randi_range(4, 6), "axe", true)
+	tree.set_meta("resource_kind", "tree")
+	tree.set_meta("log_drop_count", rng.randi_range(3, 5))
+	tree.set_meta("being_felled", false)
 
 	var trunk := MeshInstance3D.new()
 	trunk.name = "Trunk"
@@ -516,6 +519,7 @@ func create_rock(index: int) -> StaticBody3D:
 	rock.name = "Rock_%02d" % (index + 1)
 	rock.add_to_group("rocks")
 	setup_resource(rock, "stone", "Fels", rng.randi_range(2, 3), rng.randi_range(3, 5), "pickaxe", true)
+	rock.set_meta("resource_kind", "rock")
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "RockMesh"
@@ -541,6 +545,7 @@ func create_bush(index: int, biome := BIOME_MEADOW) -> StaticBody3D:
 	var bush := StaticBody3D.new()
 	bush.name = "Bush_%02d" % (index + 1)
 	setup_resource(bush, "fiber", "Busch", rng.randi_range(1, 2), rng.randi_range(1, 2), "", false)
+	bush.set_meta("resource_kind", "bush")
 
 	var clump_count = rng.randi_range(3, 5)
 	for i in range(clump_count):
@@ -570,7 +575,8 @@ func create_bush(index: int, biome := BIOME_MEADOW) -> StaticBody3D:
 func create_fallen_log(index: int) -> StaticBody3D:
 	var log_body := StaticBody3D.new()
 	log_body.name = "FallenLog_%02d" % (index + 1)
-	setup_resource(log_body, "wood", "Baumstamm", rng.randi_range(2, 3), rng.randi_range(2, 3), "axe", false)
+	setup_resource(log_body, "wood", "Baumstamm", 1, 1, "", false)
+	log_body.set_meta("resource_kind", "fallen_log")
 
 	var log_mesh_instance := MeshInstance3D.new()
 	log_mesh_instance.name = "LogMesh"
@@ -600,6 +606,7 @@ func create_tree_stump(index: int) -> StaticBody3D:
 	var stump := StaticBody3D.new()
 	stump.name = "Stump_%02d" % (index + 1)
 	setup_resource(stump, "wood", "Baumstumpf", 1, rng.randi_range(1, 2), "axe", false)
+	stump.set_meta("resource_kind", "stump")
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.name = "StumpMesh"
@@ -647,6 +654,58 @@ func get_bush_color(biome: String) -> Color:
 			return Color(0.08, 0.36, 0.12, 1)
 		_:
 			return Color(0.13, 0.46, 0.14, 1)
+
+func fell_tree(tree: Node3D, fall_direction: Vector3):
+	if not tree or not is_instance_valid(tree):
+		return
+
+	var direction := fall_direction
+	direction.y = 0.0
+	if direction.length_squared() < 0.01:
+		direction = Vector3.FORWARD
+	direction = direction.normalized()
+
+	disable_collision_shapes(tree)
+	if tree is CollisionObject3D:
+		tree.collision_layer = 0
+		tree.collision_mask = 0
+
+	tree.rotation.y = atan2(direction.x, direction.z)
+
+	var tween := create_tween()
+	tween.tween_property(tree, "rotation:x", deg_to_rad(86.0), 0.95).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	tween.tween_callback(Callable(self, "spawn_logs_from_tree").bind(tree, direction))
+	tween.tween_interval(0.25)
+	tween.tween_callback(Callable(tree, "queue_free"))
+
+func spawn_logs_from_tree(tree: Node3D, fall_direction: Vector3):
+	var parent := tree.get_parent()
+	if not parent:
+		parent = self
+
+	var drop_count := int(tree.get_meta("log_drop_count")) if tree.has_meta("log_drop_count") else 3
+	var tree_id := str(tree.get_meta("resource_id")) if tree.has_meta("resource_id") else "tree_%d" % Time.get_ticks_msec()
+	var base_position := tree.global_position
+	var side := Vector3(-fall_direction.z, 0.0, fall_direction.x)
+
+	for i in range(drop_count):
+		var log := create_fallen_log(900 + i)
+		log.name = "DroppedLog_%02d" % (i + 1)
+		log.set_meta("resource_id", "%s_log_%d" % [tree_id, i])
+		parent.add_child(log)
+
+		var offset := fall_direction * (1.2 + i * 1.35) + side * rng.randf_range(-0.65, 0.65)
+		var log_x := base_position.x + offset.x
+		var log_z := base_position.z + offset.z
+		log.global_position = Vector3(log_x, get_terrain_height(log_x, log_z), log_z)
+		log.rotation.y = atan2(fall_direction.x, fall_direction.z) + rng.randf_range(-0.20, 0.20)
+		log.scale = Vector3.ONE * rng.randf_range(0.78, 1.04)
+
+func disable_collision_shapes(node: Node):
+	for child in node.get_children():
+		if child is CollisionShape3D:
+			child.disabled = true
+		disable_collision_shapes(child)
 
 func create_material(color: Color, roughness: float) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()

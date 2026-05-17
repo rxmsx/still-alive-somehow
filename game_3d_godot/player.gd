@@ -32,6 +32,7 @@ var looked_at_resource: Node3D = null
 var selected_item := "axe"
 var selected_hotbar_index := 4
 var held_item_root: Node3D = null
+var harvest_cooldown := 0.0
 
 func _ready():
 	configure_player_rig()
@@ -59,6 +60,7 @@ func configure_player_rig():
 
 func _physics_process(delta):
 	keep_above_spawn_ground(delta)
+	harvest_cooldown = max(harvest_cooldown - delta, 0.0)
 
 	# Bewegung
 	var inventory_open := is_inventory_open()
@@ -103,7 +105,7 @@ func _input(event):
 		$Camera3D.rotate_x(-event.relative.y * mouse_sensitivity)
 		$Camera3D.rotation.x = clamp($Camera3D.rotation.x, -PI/2, PI/2)
 	
-	if is_primary_action_pressed(event) and not is_inventory_open():
+	if is_primary_action_pressed(event) and not is_inventory_open() and harvest_cooldown <= 0.0:
 		interact_with_resource()
 
 	if event.is_action_pressed("ui_cancel"):
@@ -175,11 +177,15 @@ func harvest_resource(resource: Node3D):
 	if not resource.has_meta("resource_type"):
 		return
 
+	if resource.has_meta("being_felled") and bool(resource.get_meta("being_felled")):
+		return
+
 	var resource_type := str(resource.get_meta("resource_type"))
 	var amount := int(resource.get_meta("resource_amount")) if resource.has_meta("resource_amount") else 1
 	var display_name := str(resource.get_meta("resource_name")) if resource.has_meta("resource_name") else "Ressource"
 	var remaining := int(resource.get_meta("harvests_remaining")) if resource.has_meta("harvests_remaining") else 1
 	var required_tool := str(resource.get_meta("required_tool")) if resource.has_meta("required_tool") else ""
+	var resource_kind := str(resource.get_meta("resource_kind")) if resource.has_meta("resource_kind") else ""
 	var hud = get_hud()
 
 	if required_tool != "" and int(inventory.get(required_tool, 0)) <= 0:
@@ -192,6 +198,13 @@ func harvest_resource(resource: Node3D):
 			hud.show_message("%s auswaehlen, um %s abzubauen" % [get_tool_label(required_tool), display_name])
 		return
 
+	if resource_kind != "fallen_log":
+		play_held_item_swing()
+	if resource_kind == "tree":
+		chop_tree(resource, display_name, remaining)
+		return
+
+	harvest_cooldown = 0.35
 	inventory[resource_type] = int(inventory.get(resource_type, 0)) + amount
 	remaining -= 1
 	resource.set_meta("harvests_remaining", remaining)
@@ -201,7 +214,8 @@ func harvest_resource(resource: Node3D):
 			hud.update_inventory(inventory)
 		if hud.has_method("show_message"):
 			var tool_text := " mit %s" % get_tool_label(required_tool) if required_tool != "" else ""
-			hud.show_message("+%d %s%s gesammelt" % [amount, get_resource_label(resource_type), tool_text])
+			var action_text := "aufgesammelt" if resource_kind == "fallen_log" else "gesammelt"
+			hud.show_message("+%d %s%s %s" % [amount, get_resource_label(resource_type), tool_text, action_text])
 
 	if remaining <= 0:
 		if resource == looked_at_resource:
@@ -211,8 +225,36 @@ func harvest_resource(resource: Node3D):
 	else:
 		resource.scale *= 0.94
 		if hud and hud.has_method("show_prompt"):
-			var tool_text := " mit %s" % get_tool_label(required_tool) if required_tool != "" else ""
-			hud.show_prompt("Links-Klick - %s%s abbauen" % [display_name, tool_text])
+			hud.show_prompt(get_resource_prompt(resource))
+
+func chop_tree(tree: Node3D, display_name: String, remaining: int):
+	harvest_cooldown = 0.55
+	remaining -= 1
+	tree.set_meta("harvests_remaining", remaining)
+	play_tree_chop_feedback(tree)
+
+	var hud = get_hud()
+	if remaining > 0:
+		if hud and hud.has_method("show_message"):
+			hud.show_message("%s getroffen: noch %d Schlaege" % [display_name, remaining])
+		if hud and hud.has_method("show_prompt"):
+			hud.show_prompt(get_resource_prompt(tree))
+		return
+
+	tree.set_meta("being_felled", true)
+	mark_resource_harvested(tree)
+	looked_at_resource = null
+	if hud:
+		if hud.has_method("show_message"):
+			hud.show_message("%s faellt. Baumstaemme aufsammeln." % display_name)
+		if hud.has_method("show_prompt"):
+			hud.show_prompt("")
+
+	var world = get_parent().find_child("World", true, false)
+	if world and world.has_method("fell_tree"):
+		world.fell_tree(tree, get_tree_fall_direction(tree))
+	else:
+		tree.queue_free()
 
 func update_interaction_prompt():
 	var resource := get_resource_in_view()
@@ -225,12 +267,24 @@ func update_interaction_prompt():
 		return
 
 	if looked_at_resource:
-		var display_name := str(looked_at_resource.get_meta("resource_name")) if looked_at_resource.has_meta("resource_name") else "Ressource"
-		var required_tool := str(looked_at_resource.get_meta("required_tool")) if looked_at_resource.has_meta("required_tool") else ""
-		var tool_text := " mit %s" % get_tool_label(required_tool) if required_tool != "" else ""
-		hud.show_prompt("Links-Klick - %s%s abbauen" % [display_name, tool_text])
+		hud.show_prompt(get_resource_prompt(looked_at_resource))
 	else:
 		hud.show_prompt("")
+
+func get_resource_prompt(resource: Node3D) -> String:
+	var display_name := str(resource.get_meta("resource_name")) if resource.has_meta("resource_name") else "Ressource"
+	var required_tool := str(resource.get_meta("required_tool")) if resource.has_meta("required_tool") else ""
+	var resource_kind := str(resource.get_meta("resource_kind")) if resource.has_meta("resource_kind") else ""
+	var tool_text := " mit %s" % get_tool_label(required_tool) if required_tool != "" else ""
+
+	if resource_kind == "tree":
+		var remaining := int(resource.get_meta("harvests_remaining")) if resource.has_meta("harvests_remaining") else 1
+		return "Links-Klick - %s%s faellen (%d)" % [display_name, tool_text, remaining]
+
+	if resource_kind == "fallen_log":
+		return "Links-Klick - %s aufsammeln" % display_name
+
+	return "Links-Klick - %s%s abbauen" % [display_name, tool_text]
 
 func get_resource_in_view() -> Node3D:
 	var camera := get_node_or_null("Camera3D") as Camera3D
@@ -281,6 +335,15 @@ func mark_resource_harvested(resource: Node3D):
 	var world = get_parent().find_child("World", true, false)
 	if world and world.has_method("mark_resource_harvested"):
 		world.mark_resource_harvested(str(resource.get_meta("resource_id")))
+
+func get_tree_fall_direction(tree: Node3D) -> Vector3:
+	var direction := tree.global_position - global_position
+	direction.y = 0.0
+	if direction.length_squared() < 0.01:
+		direction = -global_transform.basis.z
+		direction.y = 0.0
+
+	return direction.normalized()
 
 func toggle_inventory():
 	var hud = get_hud()
@@ -464,6 +527,29 @@ func add_held_mesh(mesh: Mesh, position: Vector3, rotation: Vector3, scale: Vect
 	mesh_instance.scale = scale
 	mesh_instance.set_surface_override_material(0, create_held_material(color))
 	held_item_root.add_child(mesh_instance)
+
+func play_held_item_swing():
+	ensure_held_item_root()
+	if not held_item_root or not held_item_root.visible:
+		return
+
+	var base_position := Vector3(0.45, -0.45, -0.85)
+	var base_rotation := Vector3(deg_to_rad(-10.0), deg_to_rad(-18.0), deg_to_rad(8.0))
+	held_item_root.position = base_position
+	held_item_root.rotation = base_rotation
+
+	var tween := create_tween()
+	tween.tween_property(held_item_root, "position", Vector3(0.34, -0.35, -0.72), 0.10)
+	tween.parallel().tween_property(held_item_root, "rotation", Vector3(deg_to_rad(-48.0), deg_to_rad(-24.0), deg_to_rad(26.0)), 0.10)
+	tween.tween_property(held_item_root, "position", base_position, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(held_item_root, "rotation", base_rotation, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func play_tree_chop_feedback(tree: Node3D):
+	var base_rotation := tree.rotation
+	var tween := create_tween()
+	tween.tween_property(tree, "rotation", base_rotation + Vector3(0.0, 0.0, deg_to_rad(2.8)), 0.07)
+	tween.tween_property(tree, "rotation", base_rotation + Vector3(0.0, 0.0, deg_to_rad(-2.2)), 0.07)
+	tween.tween_property(tree, "rotation", base_rotation, 0.09)
 
 func create_held_material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
