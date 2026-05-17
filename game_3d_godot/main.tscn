@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3 uid="uid://cyja8fwn0pycm"]
+[gd_scene load_steps=5 format=3 uid="uid://cyja8fwn0pycm"]
 
 [ext_resource type="Script" path="res://player.gd" id="1_t1syx"]
 [ext_resource type="Script" path="res://world.gd" id="2_kg6vy"]
@@ -6,18 +6,6 @@
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_jx1cl"]
 height = 1.8
-
-[sub_resource type="StandardMaterial3D" id="StandardMaterial_grass"]
-albedo_color = Color(0.35, 0.5, 0.25, 1)
-roughness = 0.8
-metallic = 0.0
-
-[sub_resource type="BoxMesh" id="BoxMesh_x8nme"]
-size = Vector3(200, 1, 200)
-material = SubResource("StandardMaterial_grass")
-
-[sub_resource type="BoxShape3D" id="BoxShape3D_2t2mq"]
-size = Vector3(200, 1, 200)
 
 [sub_resource type="LabelSettings" id="LabelSettings_89fkp"]
 font_sizes/font_size = 24
@@ -35,21 +23,20 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
 script = ExtResource("1_t1syx")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_jx1cl")
 
 [node name="Camera3D" type="Camera3D" parent="Player"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.6, 0)
 
 [node name="World" type="Node3D" parent="."]
 script = ExtResource("2_kg6vy")
 
 [node name="Terrain" type="MeshInstance3D" parent="World"]
-mesh = SubResource("BoxMesh_x8nme")
 
 [node name="TerrainCollider" type="StaticBody3D" parent="World"]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="World/TerrainCollider"]
-shape = SubResource("BoxShape3D_2t2mq")
 
 [node name="Trees" type="Node3D" parent="World"]
 
