@@ -1,52 +1,64 @@
-# World.gd - Terrain und Welt-Management
+# World.gd - Chunk-Terrain und Welt-Management
 extends Node3D
 
-const ROCK_POSITIONS := [
-	Vector3(68, 0, -42),
-	Vector3(-72, 0, -36),
-	Vector3(70, 0, 30),
-	Vector3(-64, 0, 52),
-	Vector3(42, 0, 68),
-]
-const STARTER_RESOURCE_POSITIONS := [
-	Vector3(18, 0, -16),
-	Vector3(-22, 0, 18),
-	Vector3(28, 0, 24),
-	Vector3(-30, 0, -24),
-]
-
-const TREE_COUNT := 34
-const TREE_CLUSTER_COUNT := 6
-const TREE_CLUSTER_RADIUS := 18.0
-const TREE_MIN_DISTANCE := 5.5
-const WORLD_RADIUS := 85.0
-const PLAYER_SAFE_RADIUS := 52.0
-const ROCK_SAFE_RADIUS := 48.0
 const WORLD_COLLISION_LAYER := 1
 const RESOURCE_COLLISION_LAYER := 2
-const TERRAIN_SIZE := 240.0
-const TERRAIN_STEPS := 96
-const TERRAIN_HEIGHT := 5.5
+
+const CHUNK_SIZE := 64.0
+const CHUNK_STEPS := 24
+const CHUNK_VIEW_DISTANCE := 2
+const CHUNK_UPDATE_INTERVAL := 0.35
+const TERRAIN_HEIGHT := 6.5
+
 const SPAWN_CLEAR_RADIUS := 28.0
-const SPAWN_BLEND_RADIUS := 58.0
+const SPAWN_BLEND_RADIUS := 64.0
 const SPAWN_POSITION := Vector2(0.0, 0.0)
 const PLAYER_SPAWN_HEIGHT := 2.0
+const RESOURCE_MIN_SLOPE_NORMAL_Y := 0.72
+
+const BIOME_MEADOW := "meadow"
+const BIOME_FOREST := "forest"
+const BIOME_ROCKY := "rocky"
+const BIOME_DRY := "dry"
+const BIOME_SNOW := "snow"
 
 var rng := RandomNumberGenerator.new()
+var world_seed := 0
+var chunk_update_time := 0.0
+var current_player_chunk := Vector2i(999999, 999999)
+var chunks := {}
+var harvested_resource_ids := {}
+
+var chunks_node: Node3D
+var starter_node: Node3D
+var terrain_material: StandardMaterial3D
+
 var terrain_noise := FastNoiseLite.new()
 var terrain_detail_noise := FastNoiseLite.new()
-var terrain_heights := PackedFloat32Array()
+var moisture_noise := FastNoiseLite.new()
+var temperature_noise := FastNoiseLite.new()
+var mountain_noise := FastNoiseLite.new()
 
 func _ready():
 	rng.randomize()
+	world_seed = rng.randi()
 	setup_environment()
 	setup_terrain_noise()
-	generate_terrain()
-	spawn_trees()
-	spawn_rocks()
+	setup_dynamic_world()
+	update_chunks_around(SPAWN_POSITION, true)
 	spawn_starter_resources()
 	call_deferred("place_player_at_safe_spawn")
-	print("World geladen")
+	print("Unendliche Chunk-Welt geladen, Seed: ", world_seed)
+
+func _process(delta):
+	chunk_update_time -= delta
+	if chunk_update_time > 0.0:
+		return
+
+	chunk_update_time = CHUNK_UPDATE_INTERVAL
+	var player = get_parent().find_child("Player", true, false)
+	if player:
+		update_chunks_around(Vector2(player.global_position.x, player.global_position.z))
 
 func setup_environment():
 	var sun = get_parent().find_child("DirectionalLight3D", true, false)
@@ -66,88 +78,143 @@ func setup_environment():
 		world_environment.environment = environment
 
 func setup_terrain_noise():
-	terrain_noise.seed = rng.randi()
-	terrain_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	terrain_noise.frequency = 0.012
-	terrain_noise.fractal_octaves = 5
-	terrain_noise.fractal_lacunarity = 2.0
-	terrain_noise.fractal_gain = 0.48
+	configure_noise(terrain_noise, world_seed + 11, 0.010, 5, 0.48)
+	configure_noise(terrain_detail_noise, world_seed + 23, 0.055, 3, 0.42)
+	configure_noise(moisture_noise, world_seed + 37, 0.0045, 4, 0.52)
+	configure_noise(temperature_noise, world_seed + 53, 0.0038, 4, 0.50)
+	configure_noise(mountain_noise, world_seed + 71, 0.0065, 5, 0.54)
 
-	terrain_detail_noise.seed = rng.randi()
-	terrain_detail_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	terrain_detail_noise.frequency = 0.045
-	terrain_detail_noise.fractal_octaves = 3
-	terrain_detail_noise.fractal_lacunarity = 2.1
-	terrain_detail_noise.fractal_gain = 0.42
+func configure_noise(noise: FastNoiseLite, seed_value: int, frequency: float, octaves: int, gain: float):
+	noise.seed = seed_value
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
+	noise.frequency = frequency
+	noise.fractal_octaves = octaves
+	noise.fractal_lacunarity = 2.0
+	noise.fractal_gain = gain
 
-func generate_terrain():
-	var terrain = find_child("Terrain", true, false)
-	if not terrain or not terrain is MeshInstance3D:
-		print("Terrain node nicht gefunden")
+func setup_dynamic_world():
+	terrain_material = create_terrain_material()
+
+	var old_terrain = find_child("Terrain", true, false)
+	if old_terrain and old_terrain is MeshInstance3D:
+		old_terrain.visible = false
+		old_terrain.mesh = null
+
+	var old_terrain_collider = find_child("TerrainCollider", true, false)
+	if old_terrain_collider and old_terrain_collider is CollisionObject3D:
+		old_terrain_collider.collision_layer = 0
+		old_terrain_collider.collision_mask = 0
+		var old_shape = old_terrain_collider.find_child("CollisionShape3D", true, false)
+		if old_shape and old_shape is CollisionShape3D:
+			old_shape.shape = null
+
+	var old_trees = find_child("Trees", true, false)
+	if old_trees:
+		clear_children(old_trees)
+
+	var old_rocks = find_child("Rocks", true, false)
+	if old_rocks:
+		clear_children(old_rocks)
+
+	chunks_node = find_child("Chunks", true, false)
+	if not chunks_node:
+		chunks_node = Node3D.new()
+		chunks_node.name = "Chunks"
+		add_child(chunks_node)
+	clear_children(chunks_node)
+	chunks.clear()
+
+	starter_node = find_child("StarterResources", true, false)
+	if not starter_node:
+		starter_node = Node3D.new()
+		starter_node.name = "StarterResources"
+		add_child(starter_node)
+	clear_children(starter_node)
+
+func update_chunks_around(world_position: Vector2, force := false):
+	var center_chunk := get_chunk_coord(world_position)
+	if not force and center_chunk == current_player_chunk:
 		return
 
-	terrain_heights = build_terrain_heightmap()
-	var mesh := build_terrain_mesh(terrain_heights)
-	mesh.surface_set_material(0, create_terrain_material())
+	current_player_chunk = center_chunk
+	var needed := {}
 
-	terrain.mesh = mesh
-	terrain.position = Vector3.ZERO
+	for z_offset in range(-CHUNK_VIEW_DISTANCE, CHUNK_VIEW_DISTANCE + 1):
+		for x_offset in range(-CHUNK_VIEW_DISTANCE, CHUNK_VIEW_DISTANCE + 1):
+			var coord := Vector2i(center_chunk.x + x_offset, center_chunk.y + z_offset)
+			needed[coord] = true
+			if not chunks.has(coord):
+				chunks[coord] = create_chunk(coord)
 
-	var terrain_collider = find_child("TerrainCollider", true, false)
-	var collision_shape = terrain_collider.find_child("CollisionShape3D", true, false) if terrain_collider else null
-	if collision_shape:
-		terrain_collider.position = Vector3.ZERO
-		collision_shape.position = Vector3.ZERO
-		collision_shape.rotation = Vector3.ZERO
-		collision_shape.scale = Vector3.ONE
+	for coord in chunks.keys():
+		if not needed.has(coord):
+			var chunk = chunks[coord]
+			if chunk and is_instance_valid(chunk):
+				chunk.queue_free()
+			chunks.erase(coord)
 
-		var terrain_shape := mesh.create_trimesh_shape()
-		if terrain_shape is ConcavePolygonShape3D:
-			terrain_shape.backface_collision = true
-		collision_shape.shape = terrain_shape
+func get_chunk_coord(world_position: Vector2) -> Vector2i:
+	return Vector2i(floori(world_position.x / CHUNK_SIZE), floori(world_position.y / CHUNK_SIZE))
 
-	print("Neues Terrain generiert")
+func create_chunk(coord: Vector2i) -> Node3D:
+	var chunk := Node3D.new()
+	chunk.name = "Chunk_%d_%d" % [coord.x, coord.y]
+	chunk.position = Vector3(coord.x * CHUNK_SIZE, 0.0, coord.y * CHUNK_SIZE)
+	chunks_node.add_child(chunk)
 
-func build_terrain_heightmap() -> PackedFloat32Array:
-	var heights := PackedFloat32Array()
-	heights.resize((TERRAIN_STEPS + 1) * (TERRAIN_STEPS + 1))
+	var terrain_body := StaticBody3D.new()
+	terrain_body.name = "TerrainBody"
+	terrain_body.collision_layer = WORLD_COLLISION_LAYER
+	terrain_body.collision_mask = 0
+	chunk.add_child(terrain_body)
 
-	var cell_size := TERRAIN_SIZE / TERRAIN_STEPS
-	var half_size := TERRAIN_SIZE * 0.5
+	var mesh := build_chunk_mesh(coord)
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = "TerrainMesh"
+	mesh_instance.mesh = mesh
+	mesh_instance.set_surface_override_material(0, terrain_material)
+	terrain_body.add_child(mesh_instance)
 
-	for z_index in range(TERRAIN_STEPS + 1):
-		for x_index in range(TERRAIN_STEPS + 1):
-			var x := -half_size + x_index * cell_size
-			var z := -half_size + z_index * cell_size
-			heights[get_height_index(x_index, z_index)] = calculate_terrain_height(x, z)
+	var collision_shape := CollisionShape3D.new()
+	collision_shape.name = "TerrainCollision"
+	var terrain_shape := mesh.create_trimesh_shape()
+	if terrain_shape is ConcavePolygonShape3D:
+		terrain_shape.backface_collision = true
+	collision_shape.shape = terrain_shape
+	terrain_body.add_child(collision_shape)
 
-	return heights
+	spawn_chunk_resources(chunk, coord)
+	return chunk
 
-func build_terrain_mesh(heights: PackedFloat32Array) -> ArrayMesh:
+func build_chunk_mesh(coord: Vector2i) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var colors := PackedColorArray()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
-	var cell_size := TERRAIN_SIZE / TERRAIN_STEPS
-	var half_size := TERRAIN_SIZE * 0.5
+	var cell_size := CHUNK_SIZE / CHUNK_STEPS
+	var origin_x := coord.x * CHUNK_SIZE
+	var origin_z := coord.y * CHUNK_SIZE
 
-	for z_index in range(TERRAIN_STEPS + 1):
-		for x_index in range(TERRAIN_STEPS + 1):
-			var x := -half_size + x_index * cell_size
-			var z := -half_size + z_index * cell_size
-			var y := heights[get_height_index(x_index, z_index)]
-			vertices.append(Vector3(x, y, z))
-			normals.append(get_terrain_vertex_normal(x_index, z_index, heights))
-			colors.append(get_terrain_vertex_color(x, z, y))
-			uvs.append(Vector2(float(x_index) / TERRAIN_STEPS, float(z_index) / TERRAIN_STEPS) * 12.0)
+	for z_index in range(CHUNK_STEPS + 1):
+		for x_index in range(CHUNK_STEPS + 1):
+			var local_x := x_index * cell_size
+			var local_z := z_index * cell_size
+			var world_x := origin_x + local_x
+			var world_z := origin_z + local_z
+			var height := calculate_terrain_height(world_x, world_z)
 
-	for z_index in range(TERRAIN_STEPS):
-		for x_index in range(TERRAIN_STEPS):
-			var top_left := z_index * (TERRAIN_STEPS + 1) + x_index
+			vertices.append(Vector3(local_x, height, local_z))
+			normals.append(get_terrain_normal(world_x, world_z, cell_size))
+			colors.append(get_terrain_vertex_color(world_x, world_z, height))
+			uvs.append(Vector2(float(x_index) / CHUNK_STEPS, float(z_index) / CHUNK_STEPS) * 4.0)
+
+	for z_index in range(CHUNK_STEPS):
+		for x_index in range(CHUNK_STEPS):
+			var top_left := z_index * (CHUNK_STEPS + 1) + x_index
 			var top_right := top_left + 1
-			var bottom_left := top_left + TERRAIN_STEPS + 1
+			var bottom_left := top_left + CHUNK_STEPS + 1
 			var bottom_right := bottom_left + 1
 
 			indices.append(top_left)
@@ -168,23 +235,6 @@ func build_terrain_mesh(heights: PackedFloat32Array) -> ArrayMesh:
 
 	return mesh
 
-func get_height_index(x_index: int, z_index: int) -> int:
-	return z_index * (TERRAIN_STEPS + 1) + x_index
-
-func get_terrain_vertex_normal(x_index: int, z_index: int, heights: PackedFloat32Array) -> Vector3:
-	var left: int = max(x_index - 1, 0)
-	var right: int = min(x_index + 1, TERRAIN_STEPS)
-	var back: int = max(z_index - 1, 0)
-	var forward: int = min(z_index + 1, TERRAIN_STEPS)
-	var cell_size := TERRAIN_SIZE / TERRAIN_STEPS
-
-	var left_height := heights[get_height_index(left, z_index)]
-	var right_height := heights[get_height_index(right, z_index)]
-	var back_height := heights[get_height_index(x_index, back)]
-	var forward_height := heights[get_height_index(x_index, forward)]
-
-	return Vector3(left_height - right_height, cell_size * 2.0, back_height - forward_height).normalized()
-
 func create_terrain_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = Color(1, 1, 1, 1)
@@ -194,18 +244,164 @@ func create_terrain_material() -> StandardMaterial3D:
 	material.metallic = 0.0
 	return material
 
+func get_biome(x: float, z: float) -> String:
+	if Vector2(x, z).length() <= SPAWN_BLEND_RADIUS:
+		return BIOME_MEADOW
+
+	var moisture := moisture_noise.get_noise_2d(x, z)
+	var temperature := temperature_noise.get_noise_2d(x, z)
+	var mountain := mountain_noise.get_noise_2d(x, z)
+
+	if temperature < -0.30:
+		return BIOME_SNOW
+	if mountain > 0.38:
+		return BIOME_ROCKY
+	if moisture < -0.34 and temperature > -0.05:
+		return BIOME_DRY
+	if moisture > 0.16:
+		return BIOME_FOREST
+
+	return BIOME_MEADOW
+
+func calculate_terrain_height(x: float, z: float) -> float:
+	var distance_from_start := Vector2(x, z).length()
+	if distance_from_start <= SPAWN_CLEAR_RADIUS:
+		return 0.0
+
+	var biome := get_biome(x, z)
+	var broad_hills := terrain_noise.get_noise_2d(x, z)
+	var detail := terrain_detail_noise.get_noise_2d(x, z)
+	var mountain := mountain_noise.get_noise_2d(x, z)
+	var rolling_land := (sin(x * 0.022) + cos(z * 0.019) + sin((x - z) * 0.014)) * 0.45
+	var height := 0.0
+
+	match biome:
+		BIOME_FOREST:
+			height = broad_hills * TERRAIN_HEIGHT * 0.62 + detail * 1.2 + rolling_land
+		BIOME_ROCKY:
+			height = broad_hills * TERRAIN_HEIGHT * 1.05 + abs(mountain) * 5.5 + detail * 1.6
+		BIOME_DRY:
+			height = broad_hills * TERRAIN_HEIGHT * 0.52 + detail * 0.75 + rolling_land * 0.65
+		BIOME_SNOW:
+			height = broad_hills * TERRAIN_HEIGHT * 0.85 + abs(mountain) * 3.5 + detail * 0.8
+		_:
+			height = broad_hills * TERRAIN_HEIGHT * 0.42 + detail * 0.65 + rolling_land * 0.55
+
+	var spawn_blend := smoothstep(SPAWN_CLEAR_RADIUS, SPAWN_BLEND_RADIUS, distance_from_start)
+	return height * spawn_blend
+
 func get_terrain_vertex_color(x: float, z: float, height: float) -> Color:
-	var distance_from_spawn := Vector2(x, z).length()
-	if distance_from_spawn <= SPAWN_CLEAR_RADIUS:
+	if Vector2(x, z).length() <= SPAWN_CLEAR_RADIUS:
 		return Color(0.34, 0.52, 0.25, 1)
 
-	if height < -1.2:
-		return Color(0.22, 0.36, 0.20, 1)
+	var biome := get_biome(x, z)
+	match biome:
+		BIOME_FOREST:
+			return Color(0.12, 0.38, 0.16, 1) if height < 3.5 else Color(0.24, 0.35, 0.20, 1)
+		BIOME_ROCKY:
+			return Color(0.43, 0.44, 0.40, 1) if height < 6.0 else Color(0.54, 0.55, 0.53, 1)
+		BIOME_DRY:
+			return Color(0.54, 0.47, 0.27, 1) if height < 2.5 else Color(0.45, 0.40, 0.28, 1)
+		BIOME_SNOW:
+			return Color(0.78, 0.84, 0.82, 1) if height > 2.0 else Color(0.44, 0.55, 0.49, 1)
+		_:
+			return Color(0.25, 0.46, 0.23, 1) if height < 2.8 else Color(0.34, 0.45, 0.28, 1)
 
-	if height > 3.4:
-		return Color(0.42, 0.43, 0.35, 1)
+func get_terrain_height(x: float, z: float) -> float:
+	return calculate_terrain_height(x, z)
 
-	return Color(0.25, 0.46, 0.23, 1)
+func get_terrain_normal(x: float, z: float, sample_distance: float) -> Vector3:
+	var left := get_terrain_height(x - sample_distance, z)
+	var right := get_terrain_height(x + sample_distance, z)
+	var back := get_terrain_height(x, z - sample_distance)
+	var forward := get_terrain_height(x, z + sample_distance)
+
+	return Vector3(left - right, sample_distance * 2.0, back - forward).normalized()
+
+func spawn_chunk_resources(chunk: Node3D, coord: Vector2i):
+	var resource_rng := RandomNumberGenerator.new()
+	resource_rng.seed = get_chunk_seed(coord, 101)
+	var resources_node := Node3D.new()
+	resources_node.name = "Resources"
+	chunk.add_child(resources_node)
+
+	var biome := get_biome((coord.x + 0.5) * CHUNK_SIZE, (coord.y + 0.5) * CHUNK_SIZE)
+	var counts := get_biome_resource_counts(biome)
+
+	spawn_resources_of_type(resources_node, coord, resource_rng, biome, "tree", int(counts.get("tree", 0)))
+	spawn_resources_of_type(resources_node, coord, resource_rng, biome, "rock", int(counts.get("rock", 0)))
+	spawn_resources_of_type(resources_node, coord, resource_rng, biome, "bush", int(counts.get("bush", 0)))
+	spawn_resources_of_type(resources_node, coord, resource_rng, biome, "log", int(counts.get("log", 0)))
+	spawn_resources_of_type(resources_node, coord, resource_rng, biome, "stump", int(counts.get("stump", 0)))
+
+func get_biome_resource_counts(biome: String) -> Dictionary:
+	match biome:
+		BIOME_FOREST:
+			return {"tree": 10, "rock": 2, "bush": 5, "log": 2, "stump": 1}
+		BIOME_ROCKY:
+			return {"tree": 1, "rock": 9, "bush": 1, "log": 0, "stump": 0}
+		BIOME_DRY:
+			return {"tree": 2, "rock": 4, "bush": 2, "log": 1, "stump": 2}
+		BIOME_SNOW:
+			return {"tree": 3, "rock": 6, "bush": 1, "log": 0, "stump": 1}
+		_:
+			return {"tree": 4, "rock": 3, "bush": 5, "log": 1, "stump": 1}
+
+func spawn_resources_of_type(resources_node: Node3D, coord: Vector2i, resource_rng: RandomNumberGenerator, biome: String, resource_kind: String, count: int):
+	var spawned := 0
+	var attempts := 0
+	while spawned < count and attempts < count * 12:
+		attempts += 1
+		var world_x := coord.x * CHUNK_SIZE + resource_rng.randf_range(4.0, CHUNK_SIZE - 4.0)
+		var world_z := coord.y * CHUNK_SIZE + resource_rng.randf_range(4.0, CHUNK_SIZE - 4.0)
+		if not is_resource_position_valid(world_x, world_z, resource_kind):
+			continue
+
+		var resource_id := "%d_%d_%s_%d" % [coord.x, coord.y, resource_kind, attempts]
+		if harvested_resource_ids.has(resource_id):
+			continue
+
+		var resource := create_resource_for_kind(resource_kind, spawned, biome)
+		resource.set_meta("resource_id", resource_id)
+		resource.position = Vector3(world_x - coord.x * CHUNK_SIZE, get_terrain_height(world_x, world_z), world_z - coord.y * CHUNK_SIZE)
+		resource.rotation.y = resource_rng.randf_range(0.0, TAU)
+		resource.scale = Vector3.ONE * resource_rng.randf_range(0.85, 1.18)
+		resources_node.add_child(resource)
+		spawned += 1
+
+func is_resource_position_valid(x: float, z: float, resource_kind: String) -> bool:
+	if Vector2(x, z).length() < SPAWN_CLEAR_RADIUS + 9.0:
+		return false
+
+	var normal := get_terrain_normal(x, z, CHUNK_SIZE / CHUNK_STEPS)
+	if normal.y < RESOURCE_MIN_SLOPE_NORMAL_Y:
+		return false
+
+	var biome := get_biome(x, z)
+	if resource_kind == "tree" and biome == BIOME_ROCKY:
+		return mountain_noise.get_noise_2d(x, z) < 0.52
+	if resource_kind == "bush" and biome == BIOME_SNOW:
+		return moisture_noise.get_noise_2d(x, z) > -0.05
+
+	return true
+
+func create_resource_for_kind(resource_kind: String, index: int, biome: String) -> Node3D:
+	match resource_kind:
+		"tree":
+			return create_tree(index, biome)
+		"rock":
+			return create_rock(index)
+		"bush":
+			return create_bush(index, biome)
+		"log":
+			return create_fallen_log(index)
+		"stump":
+			return create_tree_stump(index)
+		_:
+			return create_bush(index, biome)
+
+func get_chunk_seed(coord: Vector2i, salt: int) -> int:
+	return abs(hash("%d:%d:%d:%d" % [world_seed, coord.x, coord.y, salt]))
 
 func place_player_at_safe_spawn():
 	await get_tree().physics_frame
@@ -225,130 +421,44 @@ func place_player_at_safe_spawn():
 
 	print("Player bei 0:0 auf Bodenhoehe gespawnt: floor=", floor_y, " spawn=", spawn_pos)
 
-func place_player_at_spawn():
-	var player = get_parent().find_child("Player", true, false)
-	if not player:
-		print("Player node nicht gefunden")
-		return
-
-	var floor_y := get_spawn_floor_y()
-	var spawn_pos := Vector3(SPAWN_POSITION.x, floor_y + PLAYER_SPAWN_HEIGHT, SPAWN_POSITION.y)
-	player.global_position = spawn_pos
-	player.velocity = Vector3.ZERO
-	print("Player am Spawn platziert bei ", spawn_pos)
-
 func get_spawn_floor_y() -> float:
 	return get_terrain_height(SPAWN_POSITION.x, SPAWN_POSITION.y)
 
-func spawn_trees():
-	var trees_node = find_child("Trees", true, false)
-	if not trees_node:
-		print("Trees node nicht gefunden")
-		return
-
-	clear_children(trees_node)
-
-	var tree_positions := generate_tree_positions()
-	for i in range(tree_positions.size()):
-		var tree = create_tree(i)
-		tree.position = tree_positions[i]
-		tree.rotation.y = rng.randf_range(0.0, TAU)
-		tree.scale = Vector3.ONE * rng.randf_range(0.82, 1.28)
-		trees_node.add_child(tree)
-		print("Baum %d gespawnt bei %s" % [i + 1, tree.position])
-
-	print("%d zufaellige Baeume gespawnt" % tree_positions.size())
-
-func spawn_rocks():
-	var rocks_node = find_child("Rocks", true, false)
-	if not rocks_node:
-		print("Rocks node nicht gefunden")
-		return
-
-	clear_children(rocks_node)
-
-	for i in range(ROCK_POSITIONS.size()):
-		var rock = create_rock(i)
-		rock.position = with_terrain_y(ROCK_POSITIONS[i])
-		if Vector2(rock.position.x, rock.position.z).length() < ROCK_SAFE_RADIUS:
-			rock.position = get_random_world_position(ROCK_SAFE_RADIUS)
-		rocks_node.add_child(rock)
-		print("Fels %d gespawnt bei %s" % [i + 1, rock.position])
-
-	print("%d sichtbare Felsen gespawnt" % ROCK_POSITIONS.size())
-
 func spawn_starter_resources():
-	var starter_node = find_child("StarterResources", true, false)
 	if not starter_node:
-		starter_node = Node3D.new()
-		starter_node.name = "StarterResources"
-		add_child(starter_node)
+		return
 
 	clear_children(starter_node)
+	var starter_positions := [
+		Vector3(18, 0, -16),
+		Vector3(-22, 0, 18),
+		Vector3(28, 0, 24),
+		Vector3(-30, 0, -24),
+	]
 
-	for i in range(STARTER_RESOURCE_POSITIONS.size()):
+	for i in range(starter_positions.size()):
 		var resource: Node3D
 		match i:
 			0:
 				resource = create_fallen_log(100 + i)
 			1:
-				resource = create_bush(100 + i)
+				resource = create_bush(100 + i, BIOME_MEADOW)
 			2:
 				resource = create_rock(100 + i)
 			_:
 				resource = create_tree_stump(100 + i)
 
-		resource.position = with_terrain_y(STARTER_RESOURCE_POSITIONS[i])
+		resource.position = with_terrain_y(starter_positions[i])
 		resource.rotation.y = rng.randf_range(0.0, TAU)
 		starter_node.add_child(resource)
 
-	print("%d Starter-Ressourcen gespawnt" % STARTER_RESOURCE_POSITIONS.size())
+	print("%d Starter-Ressourcen gespawnt" % starter_positions.size())
 
-func generate_tree_positions() -> Array[Vector3]:
-	var positions: Array[Vector3] = []
-	var cluster_centers: Array[Vector3] = []
+func with_terrain_y(position: Vector3) -> Vector3:
+	position.y = get_terrain_height(position.x, position.z)
+	return position
 
-	for i in range(TREE_CLUSTER_COUNT):
-		cluster_centers.append(get_random_world_position(PLAYER_SAFE_RADIUS + 12.0))
-
-	var attempts := 0
-	while positions.size() < TREE_COUNT and attempts < TREE_COUNT * 40:
-		attempts += 1
-		var cluster_center := cluster_centers[rng.randi_range(0, cluster_centers.size() - 1)]
-		var offset := Vector2.from_angle(rng.randf_range(0.0, TAU)) * rng.randf_range(0.0, TREE_CLUSTER_RADIUS)
-		var candidate := with_terrain_y(Vector3(cluster_center.x + offset.x, 0, cluster_center.z + offset.y))
-
-		if abs(candidate.x) > WORLD_RADIUS or abs(candidate.z) > WORLD_RADIUS:
-			continue
-
-		if not is_tree_position_valid(candidate, positions):
-			continue
-
-		positions.append(candidate)
-
-	while positions.size() < TREE_COUNT:
-		var fallback := get_random_world_position(PLAYER_SAFE_RADIUS + 6.0)
-		if is_tree_position_valid(fallback, positions):
-			positions.append(fallback)
-
-	return positions
-
-func is_tree_position_valid(candidate: Vector3, positions: Array[Vector3]) -> bool:
-	if Vector2(candidate.x, candidate.z).length() < PLAYER_SAFE_RADIUS + 8.0:
-		return false
-
-	var terrain_normal := get_terrain_normal(candidate.x, candidate.z, TERRAIN_SIZE / TERRAIN_STEPS)
-	if terrain_normal.y < 0.78:
-		return false
-
-	for position in positions:
-		var distance := Vector2(candidate.x - position.x, candidate.z - position.z).length()
-		if distance < TREE_MIN_DISTANCE:
-			return false
-
-	return true
-
-func create_tree(index: int) -> Node3D:
+func create_tree(index: int, biome := BIOME_FOREST) -> Node3D:
 	var tree := StaticBody3D.new()
 	tree.name = "Tree_%02d" % (index + 1)
 	tree.add_to_group("trees")
@@ -363,7 +473,7 @@ func create_tree(index: int) -> Node3D:
 	trunk_mesh.radial_segments = 10
 	trunk.mesh = trunk_mesh
 	trunk.position.y = 2.75
-	trunk.set_surface_override_material(0, create_material(Color(0.36, 0.20, 0.08, 1), 0.85))
+	trunk.set_surface_override_material(0, create_material(get_tree_trunk_color(biome), 0.85))
 	tree.add_child(trunk)
 
 	var trunk_collision := CollisionShape3D.new()
@@ -384,7 +494,7 @@ func create_tree(index: int) -> Node3D:
 	leaves.mesh = leaves_mesh
 	leaves.position.y = 6.2
 	leaves.scale = Vector3(1.1, 0.9, 1.1)
-	leaves.set_surface_override_material(0, create_material(Color(0.08, 0.48, 0.13, 1), 0.7))
+	leaves.set_surface_override_material(0, create_material(get_tree_leaf_color(biome), 0.7))
 	tree.add_child(leaves)
 
 	var crown := MeshInstance3D.new()
@@ -396,7 +506,7 @@ func create_tree(index: int) -> Node3D:
 	crown_mesh.rings = 8
 	crown.mesh = crown_mesh
 	crown.position.y = 7.9
-	crown.set_surface_override_material(0, create_material(Color(0.12, 0.58, 0.16, 1), 0.65))
+	crown.set_surface_override_material(0, create_material(get_tree_leaf_color(biome).lightened(0.08), 0.65))
 	tree.add_child(crown)
 
 	return tree
@@ -413,8 +523,8 @@ func create_rock(index: int) -> StaticBody3D:
 	mesh.size = Vector3(2.4, 1.4, 1.8)
 	mesh_instance.mesh = mesh
 	mesh_instance.position.y = 0.7
-	mesh_instance.rotation = Vector3(0.2, randf_range(0.0, TAU), 0.1)
-	mesh_instance.scale = Vector3(randf_range(0.8, 1.25), randf_range(0.75, 1.15), randf_range(0.8, 1.2))
+	mesh_instance.rotation = Vector3(0.2, rng.randf_range(0.0, TAU), 0.1)
+	mesh_instance.scale = Vector3(rng.randf_range(0.8, 1.25), rng.randf_range(0.75, 1.15), rng.randf_range(0.8, 1.2))
 	mesh_instance.set_surface_override_material(0, create_material(Color(0.42, 0.43, 0.40, 1), 0.9))
 	rock.add_child(mesh_instance)
 
@@ -427,7 +537,7 @@ func create_rock(index: int) -> StaticBody3D:
 
 	return rock
 
-func create_bush(index: int) -> StaticBody3D:
+func create_bush(index: int, biome := BIOME_MEADOW) -> StaticBody3D:
 	var bush := StaticBody3D.new()
 	bush.name = "Bush_%02d" % (index + 1)
 	setup_resource(bush, "fiber", "Busch", rng.randi_range(1, 2), rng.randi_range(1, 2), "", false)
@@ -444,7 +554,7 @@ func create_bush(index: int) -> StaticBody3D:
 		clump.mesh = mesh
 		clump.position = Vector3(rng.randf_range(-0.9, 0.9), rng.randf_range(0.45, 0.8), rng.randf_range(-0.9, 0.9))
 		clump.scale = Vector3(rng.randf_range(0.9, 1.3), rng.randf_range(0.65, 1.0), rng.randf_range(0.9, 1.3))
-		clump.set_surface_override_material(0, create_material(Color(rng.randf_range(0.08, 0.18), rng.randf_range(0.35, 0.58), rng.randf_range(0.09, 0.18), 1), 0.75))
+		clump.set_surface_override_material(0, create_material(get_bush_color(biome).lightened(rng.randf_range(-0.03, 0.08)), 0.75))
 		bush.add_child(clump)
 
 	var collision := CollisionShape3D.new()
@@ -513,6 +623,31 @@ func create_tree_stump(index: int) -> StaticBody3D:
 
 	return stump
 
+func get_tree_leaf_color(biome: String) -> Color:
+	match biome:
+		BIOME_DRY:
+			return Color(0.42, 0.42, 0.18, 1)
+		BIOME_SNOW:
+			return Color(0.10, 0.34, 0.27, 1)
+		BIOME_MEADOW:
+			return Color(0.12, 0.54, 0.18, 1)
+		_:
+			return Color(0.08, 0.42, 0.13, 1)
+
+func get_tree_trunk_color(biome: String) -> Color:
+	return Color(0.30, 0.18, 0.08, 1) if biome == BIOME_DRY else Color(0.36, 0.20, 0.08, 1)
+
+func get_bush_color(biome: String) -> Color:
+	match biome:
+		BIOME_DRY:
+			return Color(0.36, 0.39, 0.18, 1)
+		BIOME_SNOW:
+			return Color(0.20, 0.38, 0.31, 1)
+		BIOME_FOREST:
+			return Color(0.08, 0.36, 0.12, 1)
+		_:
+			return Color(0.13, 0.46, 0.14, 1)
+
 func create_material(color: Color, roughness: float) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
@@ -534,43 +669,11 @@ func setup_resource(node: Node3D, resource_type: String, display_name: String, a
 			node.collision_layer |= WORLD_COLLISION_LAYER
 		node.collision_mask = 0
 
-func get_random_world_position(min_distance_from_player := PLAYER_SAFE_RADIUS) -> Vector3:
-	var position := Vector3.ZERO
-	for i in range(20):
-		position = Vector3(rng.randf_range(-WORLD_RADIUS, WORLD_RADIUS), 0, rng.randf_range(-WORLD_RADIUS, WORLD_RADIUS))
-		if Vector2(position.x, position.z).length() >= min_distance_from_player:
-			return with_terrain_y(position)
-
-	return with_terrain_y(Vector3(min_distance_from_player + 2.0, 0, min_distance_from_player + 2.0))
-
-func with_terrain_y(position: Vector3) -> Vector3:
-	position.y = get_terrain_height(position.x, position.z)
-	return position
-
-func get_terrain_height(x: float, z: float) -> float:
-	return calculate_terrain_height(x, z)
-
-func calculate_terrain_height(x: float, z: float) -> float:
-	var distance_from_start := Vector2(x, z).length()
-	if distance_from_start <= SPAWN_CLEAR_RADIUS:
-		return 0.0
-
-	var spawn_blend := smoothstep(SPAWN_CLEAR_RADIUS, SPAWN_BLEND_RADIUS, distance_from_start)
-	var edge_falloff := 1.0 - smoothstep(TERRAIN_SIZE * 0.45, TERRAIN_SIZE * 0.5, max(abs(x), abs(z)))
-	var broad_hills := terrain_noise.get_noise_2d(x, z) * TERRAIN_HEIGHT
-	var rolling_land := (sin(x * 0.026) + cos(z * 0.021) + sin((x - z) * 0.018)) * 0.65
-	var detail := terrain_detail_noise.get_noise_2d(x, z) * 1.1
-
-	return (broad_hills + rolling_land + detail) * spawn_blend * edge_falloff
-
-func get_terrain_normal(x: float, z: float, sample_distance: float) -> Vector3:
-	var left := get_terrain_height(x - sample_distance, z)
-	var right := get_terrain_height(x + sample_distance, z)
-	var back := get_terrain_height(x, z - sample_distance)
-	var forward := get_terrain_height(x, z + sample_distance)
-
-	return Vector3(left - right, sample_distance * 2.0, back - forward).normalized()
+func mark_resource_harvested(resource_id: String):
+	if resource_id != "":
+		harvested_resource_ids[resource_id] = true
 
 func clear_children(node: Node):
 	for child in node.get_children():
+		node.remove_child(child)
 		child.queue_free()
