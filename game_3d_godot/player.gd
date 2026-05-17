@@ -206,6 +206,7 @@ func harvest_resource(resource: Node3D):
 	if remaining <= 0:
 		if resource == looked_at_resource:
 			looked_at_resource = null
+		mark_resource_harvested(resource)
 		resource.queue_free()
 	else:
 		resource.scale *= 0.94
@@ -272,6 +273,14 @@ func update_hud_selection():
 
 func get_hud() -> Node:
 	return get_parent().find_child("HUD", true, false)
+
+func mark_resource_harvested(resource: Node3D):
+	if not resource.has_meta("resource_id"):
+		return
+
+	var world = get_parent().find_child("World", true, false)
+	if world and world.has_method("mark_resource_harvested"):
+		world.mark_resource_harvested(str(resource.get_meta("resource_id")))
 
 func toggle_inventory():
 	var hud = get_hud()
