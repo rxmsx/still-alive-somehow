@@ -12,6 +12,9 @@ const BODY_HEIGHT := 1.8
 const BODY_RADIUS := 0.35
 const EYE_HEIGHT := 1.6
 const GROUND_BUFFER := 0.08
+const WATER_SURFACE_BODY_OFFSET := 0.35
+const WATER_CURRENT_STRENGTH := 1.0
+const WATER_VERTICAL_DRAG := 0.18
 const HOTBAR_ITEMS := ["wood", "stone", "fiber", "food", "axe", "pickaxe", "", "", ""]
 
 var is_sprinting = false
@@ -78,6 +81,7 @@ func _physics_process(delta):
 	
 	# Gravity
 	velocity.y -= gravity * delta
+	apply_water_current()
 	
 	# Jump
 	if Input.is_action_just_pressed("ui_accept") and is_on_floor() and not inventory_open:
@@ -146,6 +150,29 @@ func keep_above_spawn_ground(delta):
 	if global_position.y < min_y:
 		global_position.y = min_y
 		velocity.y = 0.0
+
+func apply_water_current():
+	var world = get_parent().find_child("World", true, false)
+	if not world or not world.has_method("get_water_state_at_position"):
+		return
+
+	var water_info: Dictionary = world.get_water_state_at_position(global_position.x, global_position.z)
+	if not bool(water_info.get("active", false)):
+		return
+
+	var surface_y: float = float(water_info.get("surface_y", -99999.0))
+	var submersion: float = clamp((surface_y - global_position.y + WATER_SURFACE_BODY_OFFSET) / BODY_HEIGHT, 0.0, 1.0)
+	if submersion <= 0.0:
+		return
+
+	var current := Vector2.ZERO
+	if water_info.has("current") and water_info["current"] is Vector2:
+		current = water_info["current"]
+
+	velocity.x += current.x * WATER_CURRENT_STRENGTH * submersion
+	velocity.z += current.y * WATER_CURRENT_STRENGTH * submersion
+	if global_position.y < surface_y:
+		velocity.y = max(velocity.y, -gravity * WATER_VERTICAL_DRAG)
 
 func teleport_to_safe_spawn(spawn_position: Vector3, floor_y: float):
 	global_position = spawn_position
