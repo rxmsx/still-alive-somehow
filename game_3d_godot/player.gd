@@ -53,6 +53,7 @@ func _ready():
 	connect_hud_settings()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	update_hud_inventory()
+	call_deferred("update_hud_inventory")
 	update_hud_selection()
 	update_held_item_visual()
 	print("✅ Player Ready")
@@ -321,6 +322,9 @@ func update_hud_selection():
 	var hud = get_hud()
 	if hud and hud.has_method("update_selected_item"):
 		hud.update_selected_item(selected_item, selected_hotbar_index)
+
+func get_inventory_snapshot() -> Dictionary:
+	return inventory.duplicate()
 
 func get_hud() -> Node:
 	return get_parent().find_child("HUD", true, false)

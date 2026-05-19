@@ -46,6 +46,7 @@ const BIOME_SNOW := "snow"
 
 var rng := RandomNumberGenerator.new()
 var world_seed := 0
+var world_name := "Neue Welt"
 var chunk_update_time := 0.0
 var current_player_chunk := Vector2i(999999, 999999)
 var chunks := {}
@@ -69,15 +70,30 @@ var river_noise := FastNoiseLite.new()
 var river_detail_noise := FastNoiseLite.new()
 
 func _ready():
-	rng.randomize()
-	world_seed = rng.randi()
+	setup_world_identity()
 	setup_environment()
 	setup_terrain_noise()
 	setup_dynamic_world()
 	update_chunks_around(SPAWN_POSITION, true)
 	spawn_starter_resources()
 	call_deferred("place_player_at_safe_spawn")
-	print("Unendliche Chunk-Welt geladen, Seed: ", world_seed)
+	print("Unendliche Chunk-Welt geladen: %s, Seed: %d" % [world_name, world_seed])
+
+func setup_world_identity():
+	var settings_node: Node = get_node_or_null("/root/WorldSettings")
+	var seed_loaded := false
+	if settings_node:
+		if settings_node.has_method("get_world_name"):
+			world_name = str(settings_node.call("get_world_name"))
+		if settings_node.has_method("get_world_seed"):
+			world_seed = int(settings_node.call("get_world_seed"))
+			seed_loaded = true
+
+	if not seed_loaded:
+		rng.randomize()
+		world_seed = rng.randi()
+
+	rng.seed = world_seed
 
 func _process(delta):
 	chunk_update_time -= delta
