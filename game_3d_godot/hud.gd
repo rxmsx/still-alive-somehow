@@ -32,6 +32,8 @@ var current_inventory := {}
 var crafting_items := {}
 var selected_item := "axe"
 var selected_hotbar_index := 4
+var last_viewport_size := Vector2.ZERO
+var layout_refresh_pending := false
 var settings := {
 	"hud_scale": 1.0,
 	"icon_scale": 1.0,
@@ -76,7 +78,9 @@ const KEY_BIND_ACTIONS := [
 
 func _ready():
 	load_settings()
+	connect_viewport_resize()
 	update_ui_scale()
+	last_viewport_size = get_viewport().get_visible_rect().size
 	ensure_extra_labels()
 	ensure_inventory_panel()
 	ensure_hotbar()
@@ -89,7 +93,29 @@ func _ready():
 func update_ui_scale():
 	var viewport_size := get_viewport().get_visible_rect().size
 	var scale_setting := get_setting_float("hud_scale")
-	ui_scale = clamp(min(viewport_size.x / 1920.0, viewport_size.y / 1080.0) * scale_setting, 0.70, 1.80)
+	ui_scale = clamp(min(viewport_size.x / 1920.0, viewport_size.y / 1080.0) * scale_setting, 0.35, 1.80)
+
+func connect_viewport_resize():
+	var viewport := get_viewport()
+	var resize_callable := Callable(self, "_on_viewport_resized")
+	if not viewport.is_connected("size_changed", resize_callable):
+		viewport.connect("size_changed", resize_callable)
+
+func _on_viewport_resized():
+	if layout_refresh_pending:
+		return
+
+	layout_refresh_pending = true
+	call_deferred("refresh_layout_for_viewport")
+
+func refresh_layout_for_viewport():
+	layout_refresh_pending = false
+	var viewport_size := get_viewport().get_visible_rect().size
+	if viewport_size == last_viewport_size:
+		return
+
+	last_viewport_size = viewport_size
+	apply_visual_settings(true)
 
 func scaled(value: float) -> float:
 	return value * ui_scale
@@ -534,27 +560,27 @@ func ensure_pause_panel():
 	pause_panel.add_child(center)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(500, 440)
+	card.custom_minimum_size = get_responsive_panel_size(Vector2(500, 440), Vector2(320, 320), Vector2(28, 28))
 	card.add_theme_stylebox_override("panel", create_panel_style(Color(0.045, 0.055, 0.050, 0.98), Color(0.72, 0.80, 0.58, 1), 8, 2))
 	center.add_child(card)
 
 	var root := VBoxContainer.new()
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_theme_constant_override("separation", 18)
+	root.add_theme_constant_override("separation", max(8, scaled_int(18)))
 	card.add_child(root)
 
 	var title := Label.new()
 	title.text = "Pause"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 42)
+	title.add_theme_font_size_override("font_size", max(24, scaled_int(42)))
 	title.add_theme_color_override("font_color", Color(0.96, 0.98, 0.86, 1))
 	root.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = "Survival World 3D"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_font_size_override("font_size", 17)
+	subtitle.add_theme_font_size_override("font_size", max(12, scaled_int(17)))
 	subtitle.add_theme_color_override("font_color", Color(0.62, 0.70, 0.58, 1))
 	root.add_child(subtitle)
 
@@ -567,7 +593,7 @@ func ensure_pause_panel():
 	var buttons := VBoxContainer.new()
 	buttons.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 12)
+	buttons.add_theme_constant_override("separation", max(8, scaled_int(12)))
 	root.add_child(buttons)
 
 	var resume_button := create_menu_button("Spiel fortsetzen", "primary")
@@ -600,48 +626,48 @@ func ensure_settings_panel():
 	settings_panel.add_child(center)
 
 	var card := PanelContainer.new()
-	card.custom_minimum_size = Vector2(900, 600)
+	card.custom_minimum_size = get_responsive_panel_size(Vector2(900, 600), Vector2(360, 360), Vector2(24, 24))
 	card.add_theme_stylebox_override("panel", create_panel_style(Color(0.050, 0.060, 0.055, 0.985), Color(0.64, 0.74, 0.54, 1), 8, 2))
 	center.add_child(card)
 
 	var root := VBoxContainer.new()
 	root.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	root.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_theme_constant_override("separation", 16)
+	root.add_theme_constant_override("separation", max(8, scaled_int(16)))
 	card.add_child(root)
 
 	var header := HBoxContainer.new()
 	header.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	header.add_theme_constant_override("separation", 12)
+	header.add_theme_constant_override("separation", max(8, scaled_int(12)))
 	root.add_child(header)
 
 	var title_column := VBoxContainer.new()
 	title_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_column.add_theme_constant_override("separation", 2)
+	title_column.add_theme_constant_override("separation", max(1, scaled_int(2)))
 	header.add_child(title_column)
 
 	var title := Label.new()
 	title.text = "Einstellungen"
-	title.add_theme_font_size_override("font_size", 34)
+	title.add_theme_font_size_override("font_size", max(22, scaled_int(34)))
 	title.add_theme_color_override("font_color", Color(0.94, 0.97, 0.84, 1))
 	title_column.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = "Steuerung, HUD und Spielgefuehl"
-	subtitle.add_theme_font_size_override("font_size", 16)
+	subtitle.add_theme_font_size_override("font_size", max(12, scaled_int(16)))
 	subtitle.add_theme_color_override("font_color", Color(0.62, 0.70, 0.58, 1))
 	title_column.add_child(subtitle)
 
 	var reset_button := Button.new()
 	reset_button.text = "Zuruecksetzen"
-	reset_button.custom_minimum_size = Vector2(160, 42)
+	reset_button.custom_minimum_size = Vector2(max(118, scaled(160)), max(34, scaled(42)))
 	style_menu_button(reset_button, "secondary")
 	reset_button.pressed.connect(reset_settings)
 	header.add_child(reset_button)
 
 	var close_button := Button.new()
 	close_button.text = "Zurueck"
-	close_button.custom_minimum_size = Vector2(120, 42)
+	close_button.custom_minimum_size = Vector2(max(94, scaled(120)), max(34, scaled(42)))
 	style_menu_button(close_button, "primary")
 	close_button.pressed.connect(func(): close_settings())
 	header.add_child(close_button)
@@ -649,7 +675,7 @@ func ensure_settings_panel():
 	settings_tabs = TabContainer.new()
 	settings_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	settings_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	settings_tabs.add_theme_font_size_override("font_size", 17)
+	settings_tabs.add_theme_font_size_override("font_size", max(13, scaled_int(17)))
 	root.add_child(settings_tabs)
 
 	settings_tabs.add_child(create_gameplay_settings_tab())
@@ -663,15 +689,24 @@ func create_overlay_dim() -> ColorRect:
 	dim.mouse_filter = Control.MOUSE_FILTER_STOP
 	return dim
 
+func get_responsive_panel_size(base_size: Vector2, min_size: Vector2, margin: Vector2) -> Vector2:
+	var viewport_size := get_viewport().get_visible_rect().size
+	var desired_size := scaled_vec(base_size)
+	var max_size := Vector2(max(220.0, viewport_size.x - margin.x * 2.0), max(220.0, viewport_size.y - margin.y * 2.0))
+	return Vector2(
+		min(max(desired_size.x, min_size.x), max_size.x),
+		min(max(desired_size.y, min_size.y), max_size.y)
+	)
+
 func create_panel_style(bg_color: Color, border_color: Color, radius := 8, border_width := 1) -> StyleBoxFlat:
 	var panel_style := StyleBoxFlat.new()
 	panel_style.bg_color = bg_color
 	panel_style.border_color = border_color
 	panel_style.set_border_width_all(border_width)
-	panel_style.content_margin_left = 24
-	panel_style.content_margin_top = 22
-	panel_style.content_margin_right = 24
-	panel_style.content_margin_bottom = 22
+	panel_style.content_margin_left = max(8, scaled_int(24))
+	panel_style.content_margin_top = max(8, scaled_int(22))
+	panel_style.content_margin_right = max(8, scaled_int(24))
+	panel_style.content_margin_bottom = max(8, scaled_int(22))
 	panel_style.corner_radius_top_left = radius
 	panel_style.corner_radius_top_right = radius
 	panel_style.corner_radius_bottom_left = radius
@@ -681,8 +716,8 @@ func create_panel_style(bg_color: Color, border_color: Color, radius := 8, borde
 func create_menu_button(text: String, kind := "secondary") -> Button:
 	var button := Button.new()
 	button.text = text
-	button.custom_minimum_size = Vector2(340, 54)
-	button.add_theme_font_size_override("font_size", 21)
+	button.custom_minimum_size = Vector2(max(230, scaled(340)), max(42, scaled(54)))
+	button.add_theme_font_size_override("font_size", max(15, scaled_int(21)))
 	style_menu_button(button, kind)
 	return button
 
@@ -721,7 +756,7 @@ func create_gameplay_settings_tab() -> Control:
 
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 12)
+	list.add_theme_constant_override("separation", max(8, scaled_int(12)))
 	scroll.add_child(list)
 
 	list.add_child(create_slider_setting("HUD-Groesse", "hud_scale", 0.75, 1.45, 0.05, 0, "%", 100.0))
@@ -743,13 +778,13 @@ func create_keybind_settings_tab() -> Control:
 
 	var list := VBoxContainer.new()
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list.add_theme_constant_override("separation", 10)
+	list.add_theme_constant_override("separation", max(8, scaled_int(10)))
 	scroll.add_child(list)
 
 	var hint := Label.new()
 	hint.text = "Aktion anklicken, dann neue Taste druecken. ESC bricht die Eingabe ab."
 	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_font_size_override("font_size", 17)
+	hint.add_theme_font_size_override("font_size", max(12, scaled_int(17)))
 	hint.add_theme_color_override("font_color", Color(0.78, 0.82, 0.70, 1))
 	list.add_child(hint)
 
@@ -761,10 +796,10 @@ func create_keybind_settings_tab() -> Control:
 func create_slider_setting(label_text: String, key: String, min_value: float, max_value: float, step: float, decimals: int, suffix: String, display_multiplier := 1.0) -> Control:
 	var row := VBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 8)
+	row.add_theme_constant_override("separation", max(4, scaled_int(8)))
 
 	var label := Label.new()
-	label.add_theme_font_size_override("font_size", 17)
+	label.add_theme_font_size_override("font_size", max(12, scaled_int(17)))
 	label.add_theme_color_override("font_color", Color(0.90, 0.94, 0.82, 1))
 	row.add_child(label)
 
@@ -791,7 +826,7 @@ func create_toggle_setting(label_text: String, key: String) -> Control:
 	var checkbox := CheckBox.new()
 	checkbox.text = label_text
 	checkbox.button_pressed = get_setting_bool(key)
-	checkbox.add_theme_font_size_override("font_size", 18)
+	checkbox.add_theme_font_size_override("font_size", max(13, scaled_int(18)))
 	checkbox.add_theme_color_override("font_color", Color(0.92, 0.94, 0.84, 1))
 	checkbox.toggled.connect(func(pressed: bool):
 		set_setting_value(key, pressed)
@@ -801,18 +836,18 @@ func create_toggle_setting(label_text: String, key: String) -> Control:
 func create_keybind_row(label_text: String, action: String) -> Control:
 	var row := HBoxContainer.new()
 	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_theme_constant_override("separation", 12)
+	row.add_theme_constant_override("separation", max(8, scaled_int(12)))
 
 	var label := Label.new()
 	label.text = label_text
-	label.custom_minimum_size = Vector2(240, 40)
+	label.custom_minimum_size = Vector2(max(140, scaled(240)), max(32, scaled(40)))
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_font_size_override("font_size", max(13, scaled_int(18)))
 	label.add_theme_color_override("font_color", Color(0.92, 0.94, 0.84, 1))
 	row.add_child(label)
 
 	var button := Button.new()
-	button.custom_minimum_size = Vector2(220, 40)
+	button.custom_minimum_size = Vector2(max(128, scaled(220)), max(32, scaled(40)))
 	button.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	style_menu_button(button, "secondary")
 	button.pressed.connect(func():
@@ -916,6 +951,8 @@ func apply_visual_settings(rebuild_panels := true):
 func recreate_scaled_panels():
 	recreate_hotbar()
 	recreate_inventory_panel()
+	recreate_pause_panel()
+	recreate_settings_panel()
 	bring_settings_to_front()
 
 func recreate_hotbar():
@@ -944,6 +981,26 @@ func recreate_inventory_panel():
 	craft_button = null
 	ensure_inventory_panel()
 	inventory_panel.visible = was_open
+
+func recreate_pause_panel():
+	var was_visible: bool = pause_panel != null and pause_panel.visible
+	if pause_panel:
+		remove_child(pause_panel)
+		pause_panel.queue_free()
+	pause_panel = null
+	ensure_pause_panel()
+	pause_panel.visible = was_visible
+
+func recreate_settings_panel():
+	var was_visible: bool = settings_panel != null and settings_panel.visible
+	keybind_buttons.clear()
+	if settings_panel:
+		remove_child(settings_panel)
+		settings_panel.queue_free()
+	settings_panel = null
+	settings_tabs = null
+	ensure_settings_panel()
+	settings_panel.visible = was_visible
 
 func apply_extra_label_layout():
 	if prompt_label:
@@ -974,13 +1031,7 @@ func bring_settings_to_front():
 		move_child(settings_panel, get_child_count() - 1)
 
 func refresh_settings_controls():
-	keybind_buttons.clear()
-	if settings_panel:
-		remove_child(settings_panel)
-		settings_panel.queue_free()
-	settings_panel = null
-	settings_tabs = null
-	ensure_settings_panel()
+	recreate_settings_panel()
 	settings_panel.visible = settings_open
 	bring_settings_to_front()
 
