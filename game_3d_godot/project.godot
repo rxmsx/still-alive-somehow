@@ -11,8 +11,12 @@ config_version=5
 [application]
 
 config/name="Survival World 3D"
-run/main_scene="res://main.tscn"
+run/main_scene="res://main_menu.tscn"
 config/features=PackedStringArray("4.6")
+
+[autoload]
+
+WorldSettings="*res://world_settings.gd"
 
 [input]
 

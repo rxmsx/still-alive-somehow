@@ -70,6 +70,7 @@ const ARMOR_SLOT_DATA := [
 	{"id": "feet", "label": "Schuhe", "symbol": "S"},
 ]
 const SETTINGS_PATH := "user://settings.cfg"
+const MAIN_MENU_SCENE_PATH := "res://main_menu.tscn"
 const DEFAULT_SETTINGS := {
 	"hud_scale": 1.0,
 	"icon_scale": 1.0,
@@ -265,7 +266,11 @@ func resume_game():
 	close_pause_menu()
 
 func leave_game():
-	get_tree().quit()
+	get_tree().paused = false
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	var error: int = get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+	if error != OK:
+		show_message("Hauptmenue konnte nicht geladen werden")
 
 func open_settings() -> bool:
 	ensure_pause_panel()
