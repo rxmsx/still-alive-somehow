@@ -12,7 +12,17 @@ const BODY_HEIGHT := 1.8
 const BODY_RADIUS := 0.35
 const EYE_HEIGHT := 1.6
 const GROUND_BUFFER := 0.08
-const HOTBAR_ITEMS := ["wood", "stone", "fiber", "food", "axe", "pickaxe", "", "", ""]
+const WATER_SURFACE_BODY_OFFSET := 0.35
+const WATER_CURRENT_STRENGTH := 1.0
+const WATER_VERTICAL_DRAG := 0.18
+const HOTBAR_ITEMS := ["wood", "stone", "fiber", "food", "axe", "pickaxe", "spear", "torch", "campfire"]
+const CRAFTING_RECIPES := [
+	{"id": "axe", "name": "Axt", "amount": 1, "ingredients": {"wood": 1, "stone": 1, "fiber": 1}},
+	{"id": "pickaxe", "name": "Spitzhacke", "amount": 1, "ingredients": {"wood": 2, "stone": 2, "fiber": 1}},
+	{"id": "spear", "name": "Speer", "amount": 1, "ingredients": {"wood": 2, "stone": 1, "fiber": 1}},
+	{"id": "torch", "name": "Fackel", "amount": 1, "ingredients": {"wood": 1, "fiber": 2}},
+	{"id": "campfire", "name": "Lagerfeuer", "amount": 1, "ingredients": {"wood": 3, "stone": 4}},
+]
 
 var is_sprinting = false
 var health = 100.0
@@ -27,6 +37,9 @@ var inventory := {
 	"food": 0,
 	"axe": 1,
 	"pickaxe": 1,
+	"spear": 0,
+	"torch": 0,
+	"campfire": 0,
 }
 var looked_at_resource: Node3D = null
 var selected_item := "axe"
@@ -78,6 +91,7 @@ func _physics_process(delta):
 	
 	# Gravity
 	velocity.y -= gravity * delta
+	apply_water_current()
 	
 	# Jump
 	if Input.is_action_just_pressed("ui_accept") and is_on_floor() and not inventory_open:
@@ -146,6 +160,29 @@ func keep_above_spawn_ground(delta):
 	if global_position.y < min_y:
 		global_position.y = min_y
 		velocity.y = 0.0
+
+func apply_water_current():
+	var world = get_parent().find_child("World", true, false)
+	if not world or not world.has_method("get_water_state_at_position"):
+		return
+
+	var water_info: Dictionary = world.get_water_state_at_position(global_position.x, global_position.z)
+	if not bool(water_info.get("active", false)):
+		return
+
+	var surface_y: float = float(water_info.get("surface_y", -99999.0))
+	var submersion: float = clamp((surface_y - global_position.y + WATER_SURFACE_BODY_OFFSET) / BODY_HEIGHT, 0.0, 1.0)
+	if submersion <= 0.0:
+		return
+
+	var current := Vector2.ZERO
+	if water_info.has("current") and water_info["current"] is Vector2:
+		current = water_info["current"]
+
+	velocity.x += current.x * WATER_CURRENT_STRENGTH * submersion
+	velocity.z += current.y * WATER_CURRENT_STRENGTH * submersion
+	if global_position.y < surface_y:
+		velocity.y = max(velocity.y, -gravity * WATER_VERTICAL_DRAG)
 
 func teleport_to_safe_spawn(spawn_position: Vector3, floor_y: float):
 	global_position = spawn_position
@@ -401,6 +438,12 @@ func update_held_item_visual():
 			build_held_axe()
 		"pickaxe":
 			build_held_pickaxe()
+		"spear":
+			build_held_spear()
+		"torch":
+			build_held_torch()
+		"campfire":
+			build_held_campfire()
 
 func build_held_wood():
 	var mesh := CylinderMesh.new()
@@ -456,6 +499,49 @@ func build_held_pickaxe():
 	head.size = Vector3(0.72, 0.10, 0.12)
 	add_held_mesh(head, Vector3(0.0, 0.36, -0.02), Vector3(0.0, 0.0, 0.1), Vector3.ONE, Color(0.46, 0.50, 0.52, 1))
 
+func build_held_spear():
+	var shaft := CylinderMesh.new()
+	shaft.top_radius = 0.025
+	shaft.bottom_radius = 0.035
+	shaft.height = 1.15
+	shaft.radial_segments = 8
+	add_held_mesh(shaft, Vector3(0.0, -0.05, 0.0), Vector3(0.42, 0.0, 0.12), Vector3.ONE, Color(0.36, 0.20, 0.08, 1))
+
+	var tip := CylinderMesh.new()
+	tip.bottom_radius = 0.09
+	tip.top_radius = 0.0
+	tip.height = 0.24
+	tip.radial_segments = 8
+	add_held_mesh(tip, Vector3(0.0, 0.52, -0.02), Vector3(0.42, 0.0, 0.12), Vector3.ONE, Color(0.55, 0.56, 0.52, 1))
+
+func build_held_torch():
+	var handle := CylinderMesh.new()
+	handle.top_radius = 0.045
+	handle.bottom_radius = 0.055
+	handle.height = 0.85
+	handle.radial_segments = 8
+	add_held_mesh(handle, Vector3(0.0, -0.07, 0.0), Vector3(0.35, 0.0, 0.15), Vector3.ONE, Color(0.34, 0.18, 0.07, 1))
+
+	var flame := SphereMesh.new()
+	flame.radius = 0.13
+	flame.height = 0.24
+	flame.radial_segments = 10
+	flame.rings = 5
+	add_held_mesh(flame, Vector3(0.0, 0.36, -0.02), Vector3.ZERO, Vector3(0.75, 1.25, 0.75), Color(0.95, 0.42, 0.08, 1))
+
+func build_held_campfire():
+	for i in range(3):
+		var log_mesh := CylinderMesh.new()
+		log_mesh.top_radius = 0.035
+		log_mesh.bottom_radius = 0.045
+		log_mesh.height = 0.55
+		log_mesh.radial_segments = 8
+		add_held_mesh(log_mesh, Vector3((i - 1) * 0.06, -0.03, 0.0), Vector3(0.0, i * 0.7, PI / 2.0), Vector3.ONE, Color(0.33, 0.17, 0.07, 1))
+
+	var stone := BoxMesh.new()
+	stone.size = Vector3(0.38, 0.12, 0.30)
+	add_held_mesh(stone, Vector3(0.0, -0.12, 0.0), Vector3(0.2, 0.4, 0.1), Vector3.ONE, Color(0.36, 0.37, 0.34, 1))
+
 func add_held_mesh(mesh: Mesh, position: Vector3, rotation: Vector3, scale: Vector3, color: Color):
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = mesh
@@ -471,6 +557,85 @@ func create_held_material(color: Color) -> StandardMaterial3D:
 	material.roughness = 0.82
 	material.metallic = 0.0
 	return material
+
+func craft_from_ingredients(ingredients: Dictionary) -> bool:
+	var recipe := get_crafting_recipe_for_ingredients(ingredients)
+	var hud = get_hud()
+	if recipe.is_empty():
+		if hud and hud.has_method("show_message"):
+			hud.show_message("Diese Kombination ergibt nichts")
+		return false
+
+	var cost: Dictionary = recipe.get("ingredients", {})
+	if not has_inventory_items(cost):
+		if hud and hud.has_method("show_message"):
+			hud.show_message("Material fehlt")
+		return false
+
+	for item_id in cost.keys():
+		inventory[item_id] = int(inventory.get(item_id, 0)) - int(cost[item_id])
+
+	var output_id := str(recipe.get("id", ""))
+	var amount := int(recipe.get("amount", 1))
+	inventory[output_id] = int(inventory.get(output_id, 0)) + amount
+	update_hud_inventory()
+
+	if hud and hud.has_method("show_message"):
+		hud.show_message("%s hergestellt" % get_item_label(output_id))
+
+	return true
+
+func get_crafting_recipe_for_ingredients(ingredients: Dictionary) -> Dictionary:
+	var normalized := normalize_ingredients(ingredients)
+	for recipe in CRAFTING_RECIPES:
+		var cost: Dictionary = recipe.get("ingredients", {})
+		if ingredients_match(normalized, cost):
+			return recipe
+
+	return {}
+
+func get_crafting_recipe_suggestions(ingredients: Dictionary) -> Array:
+	var normalized := normalize_ingredients(ingredients)
+	var suggestions := []
+	for recipe in CRAFTING_RECIPES:
+		var cost: Dictionary = recipe.get("ingredients", {})
+		if normalized.is_empty() or ingredients_are_subset(normalized, cost):
+			suggestions.append(recipe)
+
+	return suggestions
+
+func normalize_ingredients(ingredients: Dictionary) -> Dictionary:
+	var normalized := {}
+	for item_id in ingredients.keys():
+		var amount := int(ingredients.get(item_id, 0))
+		if item_id != "" and amount > 0:
+			normalized[item_id] = amount
+
+	return normalized
+
+func ingredients_match(left: Dictionary, right: Dictionary) -> bool:
+	if left.size() != right.size():
+		return false
+
+	for item_id in right.keys():
+		if int(left.get(item_id, 0)) != int(right.get(item_id, 0)):
+			return false
+
+	return true
+
+func ingredients_are_subset(selected: Dictionary, cost: Dictionary) -> bool:
+	for item_id in selected.keys():
+		if int(selected.get(item_id, 0)) > int(cost.get(item_id, 0)):
+			return false
+
+	return true
+
+func has_inventory_items(cost: Dictionary) -> bool:
+	for item_id in cost.keys():
+		if int(inventory.get(item_id, 0)) < int(cost.get(item_id, 0)):
+			return false
+
+	return true
 
 func get_resource_label(resource_type: String) -> String:
 	match resource_type:
@@ -499,6 +664,12 @@ func get_item_label(item_id: String) -> String:
 			return "Axt"
 		"pickaxe":
 			return "Spitzhacke"
+		"spear":
+			return "Speer"
+		"torch":
+			return "Fackel"
+		"campfire":
+			return "Lagerfeuer"
 		_:
 			return item_id
 
@@ -508,5 +679,9 @@ func get_tool_label(tool_type: String) -> String:
 			return "Axt"
 		"pickaxe":
 			return "Spitzhacke"
+		"spear":
+			return "Speer"
+		"torch":
+			return "Fackel"
 		_:
 			return tool_type
