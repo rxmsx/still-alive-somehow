@@ -13,6 +13,7 @@ var crafting_suggestions_container: VBoxContainer
 var recipe_book_panel: PanelContainer
 var recipe_book_body: VBoxContainer
 var recipe_book_container: VBoxContainer
+var armor_slots_container: HBoxContainer
 var recipe_search_input: LineEdit
 var recipe_book_toggle: Button
 var craft_button: Button
@@ -29,11 +30,19 @@ var recipe_book_open := false
 var recipe_search_text := ""
 var ui_scale := 1.0
 var current_inventory := {}
+var inventory_slots := []
+var armor_slots := {
+	"head": "",
+	"chest": "",
+	"legs": "",
+	"feet": "",
+}
 var crafting_items := {}
 var selected_item := "axe"
 var selected_hotbar_index := 4
 var last_viewport_size := Vector2.ZERO
 var layout_refresh_pending := false
+var moving_inventory_slot_index := -1
 var settings := {
 	"hud_scale": 1.0,
 	"icon_scale": 1.0,
@@ -54,6 +63,12 @@ const INVENTORY_SLOT_SIZE := Vector2(118, 132)
 const INVENTORY_ICON_SIZE := 92
 const CRAFTING_COLUMN_WIDTH := 430
 const HOTBAR_ITEMS := ["wood", "stone", "fiber", "food", "axe", "pickaxe", "spear", "torch", "campfire"]
+const ARMOR_SLOT_DATA := [
+	{"id": "head", "label": "Helm", "symbol": "H"},
+	{"id": "chest", "label": "Brustplatte", "symbol": "B"},
+	{"id": "legs", "label": "Hose", "symbol": "HO"},
+	{"id": "feet", "label": "Schuhe", "symbol": "S"},
+]
 const SETTINGS_PATH := "user://settings.cfg"
 const DEFAULT_SETTINGS := {
 	"hud_scale": 1.0,
@@ -87,6 +102,7 @@ func _ready():
 	ensure_pause_panel()
 	ensure_settings_panel()
 	apply_visual_settings(true)
+	call_deferred("sync_inventory_from_player")
 	settings_changed.emit(get_settings_state())
 	print("✅ HUD geladen")
 
@@ -174,12 +190,19 @@ func update_inventory(inventory: Dictionary):
 	ensure_inventory_panel()
 	ensure_hotbar()
 	current_inventory = inventory.duplicate()
+	sync_inventory_slots_from_counts()
 	clamp_crafting_items()
 	rebuild_inventory_grid()
+	rebuild_armor_slots()
 	rebuild_hotbar()
 	rebuild_crafting_panel()
 	rebuild_recipe_book()
 	bring_settings_to_front()
+
+func sync_inventory_from_player():
+	var player = get_player()
+	if player and player.has_method("get_inventory_snapshot"):
+		update_inventory(player.get_inventory_snapshot())
 
 func update_selected_item(item_id: String, hotbar_index := -1):
 	selected_item = item_id
@@ -397,6 +420,37 @@ func ensure_inventory_panel():
 	inventory_grid.add_theme_constant_override("v_separation", scaled_int(9))
 	inventory_column.add_child(inventory_grid)
 
+	var armor_panel := PanelContainer.new()
+	armor_panel.name = "ArmorPanel"
+	armor_panel.custom_minimum_size = Vector2(scaled(INVENTORY_SLOT_SIZE.x * 4.0), scaled(134))
+	inventory_column.add_child(armor_panel)
+
+	var armor_style := StyleBoxFlat.new()
+	armor_style.bg_color = Color(0.09, 0.10, 0.095, 0.88)
+	armor_style.border_color = Color(0.32, 0.38, 0.31, 0.95)
+	armor_style.set_border_width_all(1)
+	armor_style.corner_radius_top_left = 8
+	armor_style.corner_radius_top_right = 8
+	armor_style.corner_radius_bottom_left = 8
+	armor_style.corner_radius_bottom_right = 8
+	armor_panel.add_theme_stylebox_override("panel", armor_style)
+
+	var armor_root := VBoxContainer.new()
+	armor_root.add_theme_constant_override("separation", scaled_int(8))
+	armor_panel.add_child(armor_root)
+
+	var armor_title := Label.new()
+	armor_title.text = "Ruestung"
+	armor_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	armor_title.add_theme_font_size_override("font_size", scaled_int(18))
+	armor_title.add_theme_color_override("font_color", Color(0.88, 0.92, 0.78, 1))
+	armor_root.add_child(armor_title)
+
+	armor_slots_container = HBoxContainer.new()
+	armor_slots_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	armor_slots_container.add_theme_constant_override("separation", scaled_int(10))
+	armor_root.add_child(armor_slots_container)
+
 	var side_column := VBoxContainer.new()
 	side_column.custom_minimum_size = Vector2(scaled(CRAFTING_COLUMN_WIDTH), scaled(620))
 	side_column.add_theme_constant_override("separation", scaled_int(14))
@@ -507,6 +561,7 @@ func ensure_inventory_panel():
 	recipe_book_body.add_child(recipe_book_container)
 
 	rebuild_inventory_grid()
+	rebuild_armor_slots()
 	rebuild_crafting_panel()
 	rebuild_recipe_book()
 
@@ -976,6 +1031,7 @@ func recreate_inventory_panel():
 	recipe_book_panel = null
 	recipe_book_body = null
 	recipe_book_container = null
+	armor_slots_container = null
 	recipe_search_input = null
 	recipe_book_toggle = null
 	craft_button = null
@@ -1132,16 +1188,173 @@ func format_setting_number(value: float, decimals: int) -> String:
 		_:
 			return "%.3f" % value
 
+func create_empty_inventory_slot() -> Dictionary:
+	return {"id": "", "amount": 0}
+
+func ensure_inventory_slots():
+	while inventory_slots.size() < INVENTORY_SLOT_COUNT:
+		inventory_slots.append(create_empty_inventory_slot())
+
+	if inventory_slots.size() > INVENTORY_SLOT_COUNT:
+		inventory_slots.resize(INVENTORY_SLOT_COUNT)
+
+func get_inventory_slot_data(slot_index: int) -> Dictionary:
+	ensure_inventory_slots()
+	if slot_index < 0 or slot_index >= inventory_slots.size():
+		return create_empty_inventory_slot()
+
+	var slot = inventory_slots[slot_index]
+	if slot is Dictionary:
+		return slot
+
+	return create_empty_inventory_slot()
+
+func sync_inventory_slots_from_counts():
+	ensure_inventory_slots()
+	var remaining := {}
+	for raw_item_id in current_inventory.keys():
+		var item_id := str(raw_item_id)
+		var amount := int(current_inventory.get(item_id, 0))
+		if amount > 0:
+			remaining[item_id] = amount
+
+	var new_slots := []
+	for slot_index in range(INVENTORY_SLOT_COUNT):
+		var old_slot := get_inventory_slot_data(slot_index)
+		var item_id := str(old_slot.get("id", ""))
+		if item_id != "" and remaining.has(item_id):
+			new_slots.append({"id": item_id, "amount": int(remaining[item_id])})
+			remaining.erase(item_id)
+		else:
+			new_slots.append(create_empty_inventory_slot())
+
+	for item_id in get_inventory_fill_order(remaining):
+		var slot_index := find_first_empty_slot(new_slots)
+		if slot_index < 0:
+			break
+		new_slots[slot_index] = {"id": item_id, "amount": int(remaining[item_id])}
+
+	inventory_slots = new_slots
+	if moving_inventory_slot_index >= 0:
+		var moving_slot := get_inventory_slot_data(moving_inventory_slot_index)
+		if str(moving_slot.get("id", "")) == "":
+			moving_inventory_slot_index = -1
+
+func get_inventory_fill_order(items: Dictionary) -> Array:
+	var order := []
+	for item_id in INVENTORY_ITEMS:
+		if items.has(item_id):
+			order.append(item_id)
+
+	for item_id in items.keys():
+		if not order.has(str(item_id)):
+			order.append(str(item_id))
+
+	return order
+
+func find_first_empty_slot(slots: Array) -> int:
+	for slot_index in range(slots.size()):
+		var slot = slots[slot_index]
+		if slot is Dictionary and str(slot.get("id", "")) == "":
+			return slot_index
+
+	return -1
+
+func handle_inventory_slot_click(slot_index: int):
+	var slot := get_inventory_slot_data(slot_index)
+	var item_id := str(slot.get("id", ""))
+
+	if moving_inventory_slot_index < 0:
+		if item_id == "":
+			return
+		moving_inventory_slot_index = slot_index
+		rebuild_inventory_grid()
+		return
+
+	if moving_inventory_slot_index == slot_index:
+		moving_inventory_slot_index = -1
+		rebuild_inventory_grid()
+		return
+
+	swap_inventory_slots(moving_inventory_slot_index, slot_index)
+	moving_inventory_slot_index = -1
+	rebuild_inventory_grid()
+
+func swap_inventory_slots(left_index: int, right_index: int):
+	ensure_inventory_slots()
+	if left_index < 0 or right_index < 0 or left_index >= inventory_slots.size() or right_index >= inventory_slots.size():
+		return
+
+	var left_slot: Dictionary = inventory_slots[left_index]
+	inventory_slots[left_index] = inventory_slots[right_index]
+	inventory_slots[right_index] = left_slot
+
 func rebuild_inventory_grid():
 	if not inventory_grid:
 		return
 
+	ensure_inventory_slots()
 	clear_children(inventory_grid)
 	for item_index in range(INVENTORY_SLOT_COUNT):
-		var item_id := ""
-		if item_index < INVENTORY_ITEMS.size():
-			item_id = INVENTORY_ITEMS[item_index]
-		inventory_grid.add_child(create_inventory_slot(item_id, int(current_inventory.get(item_id, 0)), false, item_index + 1, item_index))
+		var slot := get_inventory_slot_data(item_index)
+		var item_id := str(slot.get("id", ""))
+		inventory_grid.add_child(create_inventory_slot(item_id, int(slot.get("amount", 0)), false, item_index + 1, item_index))
+
+func rebuild_armor_slots():
+	if not armor_slots_container:
+		return
+
+	clear_children(armor_slots_container)
+	for slot_data in ARMOR_SLOT_DATA:
+		armor_slots_container.add_child(create_armor_slot(slot_data))
+
+func create_armor_slot(slot_data: Dictionary) -> Control:
+	var slot_id := str(slot_data.get("id", ""))
+	var item_id := str(armor_slots.get(slot_id, ""))
+	var label_text := str(slot_data.get("label", ""))
+	var symbol_text := str(slot_data.get("symbol", ""))
+
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = scaled_vec(Vector2(104, 92))
+	slot.mouse_filter = Control.MOUSE_FILTER_STOP
+
+	var slot_style := StyleBoxFlat.new()
+	slot_style.bg_color = Color(0.115, 0.135, 0.12, 0.94)
+	slot_style.border_color = Color(0.36, 0.44, 0.35, 1)
+	slot_style.set_border_width_all(1)
+	slot_style.corner_radius_top_left = 6
+	slot_style.corner_radius_top_right = 6
+	slot_style.corner_radius_bottom_left = 6
+	slot_style.corner_radius_bottom_right = 6
+	slot.add_theme_stylebox_override("panel", slot_style)
+
+	var content := VBoxContainer.new()
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_theme_constant_override("separation", scaled_int(4))
+	slot.add_child(content)
+
+	var icon := create_item_icon(item_id, scaled_int(44))
+	content.add_child(icon)
+
+	if item_id == "":
+		var symbol := Label.new()
+		symbol.text = symbol_text
+		symbol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		symbol.add_theme_font_size_override("font_size", scaled_int(13))
+		symbol.add_theme_color_override("font_color", Color(0.62, 0.68, 0.58, 1))
+		symbol.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		content.add_child(symbol)
+
+	var label := Label.new()
+	label.text = label_text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", scaled_int(12))
+	label.add_theme_color_override("font_color", Color(0.82, 0.86, 0.74, 1))
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.add_child(label)
+
+	return slot
 
 func rebuild_hotbar():
 	if not hotbar_container:
@@ -1387,18 +1600,21 @@ func create_inventory_slot(item_id: String, amount: int, compact: bool, slot_num
 	slot.custom_minimum_size = scaled_vec(Vector2(78, 64) * get_icon_scale()) if compact else scaled_vec(INVENTORY_SLOT_SIZE * inventory_slot_scale)
 	slot.mouse_filter = Control.MOUSE_FILTER_STOP
 	slot.gui_input.connect(func(event: InputEvent):
-		if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-			if compact:
+		if event is InputEventMouseButton and event.pressed:
+			if compact and event.button_index == MOUSE_BUTTON_LEFT:
 				request_item_selection(item_id, slot_index)
-			else:
+			elif not compact and event.button_index == MOUSE_BUTTON_LEFT:
+				handle_inventory_slot_click(slot_index)
+			elif not compact and event.button_index == MOUSE_BUTTON_RIGHT:
 				request_crafting_item(item_id)
 	)
 
 	var slot_style := StyleBoxFlat.new()
 	var is_on_mat := item_id != "" and int(crafting_items.get(item_id, 0)) > 0
-	var is_selected := slot_index == selected_hotbar_index if compact else item_id != "" and (item_id == selected_item or is_on_mat)
+	var is_moving := not compact and slot_index == moving_inventory_slot_index
+	var is_selected := slot_index == selected_hotbar_index if compact else is_moving or (item_id != "" and (item_id == selected_item or is_on_mat))
 	slot_style.bg_color = Color(0.18, 0.21, 0.17, 1) if is_selected else Color(0.13, 0.15, 0.13, 1)
-	slot_style.border_color = Color(0.46, 0.78, 0.92, 1) if is_on_mat and not compact else Color(0.95, 0.78, 0.30, 1) if is_selected else Color(0.32, 0.38, 0.30, 1)
+	slot_style.border_color = Color(0.46, 0.78, 0.92, 1) if is_on_mat and not compact else Color(0.74, 0.95, 0.54, 1) if is_moving else Color(0.95, 0.78, 0.30, 1) if is_selected else Color(0.32, 0.38, 0.30, 1)
 	slot_style.set_border_width_all(3 if is_selected else 1)
 	slot_style.corner_radius_top_left = 6
 	slot_style.corner_radius_top_right = 6
@@ -1552,6 +1768,14 @@ func get_item_icon_color(item_id: String) -> Color:
 			return Color(0.70, 0.30, 0.08, 1)
 		"campfire":
 			return Color(0.46, 0.30, 0.18, 1)
+		"helmet":
+			return Color(0.44, 0.48, 0.50, 1)
+		"chestplate":
+			return Color(0.34, 0.40, 0.43, 1)
+		"pants":
+			return Color(0.25, 0.32, 0.38, 1)
+		"boots":
+			return Color(0.20, 0.18, 0.15, 1)
 		_:
 			return Color(0.25, 0.25, 0.25, 1)
 
@@ -1575,6 +1799,14 @@ func get_item_icon_symbol(item_id: String) -> String:
 			return "F"
 		"campfire":
 			return "L"
+		"helmet":
+			return "H"
+		"chestplate":
+			return "B"
+		"pants":
+			return "HO"
+		"boots":
+			return "S"
 		_:
 			return "?"
 
@@ -1598,6 +1830,14 @@ func get_item_label(item_id: String) -> String:
 			return "Fackel"
 		"campfire":
 			return "Lagerfeuer"
+		"helmet":
+			return "Helm"
+		"chestplate":
+			return "Brustplatte"
+		"pants":
+			return "Hose"
+		"boots":
+			return "Schuhe"
 		_:
 			return item_id
 
