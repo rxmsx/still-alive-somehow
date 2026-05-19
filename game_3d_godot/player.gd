@@ -45,10 +45,12 @@ var looked_at_resource: Node3D = null
 var selected_item := "axe"
 var selected_hotbar_index := 4
 var held_item_root: Node3D = null
+var invert_mouse_y := false
 
 func _ready():
 	configure_player_rig()
 	ensure_held_item_root()
+	connect_hud_settings()
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	update_hud_inventory()
 	update_hud_selection()
@@ -74,12 +76,12 @@ func _physics_process(delta):
 	keep_above_spawn_ground(delta)
 
 	# Bewegung
-	var inventory_open := is_inventory_open()
-	var input_dir: Vector2 = Vector2.ZERO if inventory_open else Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
+	var menu_open := is_any_menu_open()
+	var input_dir: Vector2 = Vector2.ZERO if menu_open else Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	var direction = (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 	
 	# Sprint
-	is_sprinting = Input.is_action_pressed("sprint") and stamina > 0
+	is_sprinting = not menu_open and Input.is_action_pressed("sprint") and stamina > 0
 	var current_speed = sprint_speed if is_sprinting else speed
 	
 	if direction:
@@ -94,7 +96,7 @@ func _physics_process(delta):
 	apply_water_current()
 	
 	# Jump
-	if Input.is_action_just_pressed("ui_accept") and is_on_floor() and not inventory_open:
+	if Input.is_action_just_pressed("ui_accept") and is_on_floor() and not menu_open:
 		velocity.y = jump_force
 	
 	# Move
@@ -105,6 +107,23 @@ func _physics_process(delta):
 	update_interaction_prompt()
 
 func _input(event):
+	if is_keybind_capture_active():
+		return
+
+	if event.is_action_pressed("ui_cancel"):
+		if is_settings_open():
+			close_settings()
+		elif is_pause_menu_open():
+			close_pause_menu()
+		elif is_inventory_open():
+			close_inventory()
+		else:
+			open_pause_menu()
+		return
+
+	if is_pause_menu_open() or is_settings_open():
+		return
+
 	if event.is_action_pressed("inventory"):
 		toggle_inventory()
 		return
@@ -112,19 +131,14 @@ func _input(event):
 	if handle_selection_input(event):
 		return
 
-	if event is InputEventMouseMotion and not is_inventory_open():
+	if event is InputEventMouseMotion and not is_any_menu_open():
 		rotate_y(-event.relative.x * mouse_sensitivity)
-		$Camera3D.rotate_x(-event.relative.y * mouse_sensitivity)
+		var pitch_delta: float = event.relative.y * mouse_sensitivity if invert_mouse_y else -event.relative.y * mouse_sensitivity
+		$Camera3D.rotate_x(pitch_delta)
 		$Camera3D.rotation.x = clamp($Camera3D.rotation.x, -PI/2, PI/2)
 	
-	if is_primary_action_pressed(event) and not is_inventory_open():
+	if is_primary_action_pressed(event) and not is_any_menu_open():
 		interact_with_resource()
-
-	if event.is_action_pressed("ui_cancel"):
-		if is_inventory_open():
-			close_inventory()
-			return
-		get_tree().quit()
 
 func update_survival_stats(delta):
 	# Hunger
@@ -311,6 +325,30 @@ func update_hud_selection():
 func get_hud() -> Node:
 	return get_parent().find_child("HUD", true, false)
 
+func connect_hud_settings():
+	var hud = get_hud()
+	if not hud:
+		return
+
+	var settings_callable := Callable(self, "apply_settings")
+	if hud.has_signal("settings_changed") and not hud.is_connected("settings_changed", settings_callable):
+		hud.connect("settings_changed", settings_callable)
+
+	if hud.has_method("get_settings_state"):
+		apply_settings(hud.get_settings_state())
+
+func apply_settings(settings: Dictionary):
+	if settings.has("mouse_sensitivity"):
+		mouse_sensitivity = float(settings.get("mouse_sensitivity"))
+	if settings.has("invert_y"):
+		invert_mouse_y = bool(settings.get("invert_y"))
+	if settings.has("interact_range"):
+		interact_range = float(settings.get("interact_range"))
+
+	var camera := get_node_or_null("Camera3D") as Camera3D
+	if camera and settings.has("fov"):
+		camera.fov = float(settings.get("fov"))
+
 func mark_resource_harvested(resource: Node3D):
 	if not resource.has_meta("resource_id"):
 		return
@@ -322,14 +360,14 @@ func mark_resource_harvested(resource: Node3D):
 func toggle_inventory():
 	var hud = get_hud()
 	if hud and hud.has_method("toggle_inventory"):
-		var opened: bool = bool(hud.toggle_inventory())
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if opened else Input.MOUSE_MODE_CAPTURED)
+		hud.toggle_inventory()
+		refresh_mouse_mode()
 
 func close_inventory():
 	var hud = get_hud()
 	if hud and hud.has_method("close_inventory"):
 		hud.close_inventory()
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	refresh_mouse_mode()
 
 func is_inventory_open() -> bool:
 	var hud = get_hud()
@@ -338,7 +376,65 @@ func is_inventory_open() -> bool:
 
 	return false
 
+func open_settings():
+	var hud = get_hud()
+	if hud and hud.has_method("open_settings"):
+		hud.open_settings()
+	refresh_mouse_mode()
+
+func close_settings():
+	var hud = get_hud()
+	if hud and hud.has_method("close_settings"):
+		hud.close_settings()
+	refresh_mouse_mode()
+
+func is_settings_open() -> bool:
+	var hud = get_hud()
+	if hud and hud.has_method("is_settings_open"):
+		return hud.is_settings_open()
+
+	return false
+
+func open_pause_menu():
+	var hud = get_hud()
+	if hud and hud.has_method("open_pause_menu"):
+		hud.open_pause_menu()
+	refresh_mouse_mode()
+
+func close_pause_menu():
+	var hud = get_hud()
+	if hud and hud.has_method("close_pause_menu"):
+		hud.close_pause_menu()
+	refresh_mouse_mode()
+
+func is_pause_menu_open() -> bool:
+	var hud = get_hud()
+	if hud and hud.has_method("is_pause_menu_open"):
+		return hud.is_pause_menu_open()
+
+	return false
+
+func is_any_menu_open() -> bool:
+	var hud = get_hud()
+	if hud and hud.has_method("is_any_menu_open"):
+		return hud.is_any_menu_open()
+
+	return is_inventory_open()
+
+func is_keybind_capture_active() -> bool:
+	var hud = get_hud()
+	if hud and hud.has_method("is_keybind_capture_active"):
+		return hud.is_keybind_capture_active()
+
+	return false
+
+func refresh_mouse_mode():
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE if is_any_menu_open() else Input.MOUSE_MODE_CAPTURED)
+
 func is_primary_action_pressed(event: InputEvent) -> bool:
+	if event.is_action_pressed("interact"):
+		return true
+
 	return event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT
 
 func handle_selection_input(event: InputEvent) -> bool:
