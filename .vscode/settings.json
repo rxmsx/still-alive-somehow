@@ -1,0 +1,11 @@
+{
+  "files.associations": {
+    "*.uproject": "json",
+    "*.uplugin": "json"
+  },
+  "python.analysis.extraPaths": [
+    "Intermediate/PythonStub",
+    "Scripts/Unreal"
+  ],
+  "python.analysis.typeCheckingMode": "basic"
+}
