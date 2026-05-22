@@ -3,6 +3,9 @@
 #include "Items/InventoryComponent.h"
 #include "Resources/ResourceNodeActor.h"
 #include "Resources/ResourceNodeComponent.h"
+#include "Survival/BodyConditionComponent.h"
+#include "Survival/SurvivalStatsComponent.h"
+#include "World/WorldTimeWeatherSubsystem.h"
 #include "World/WorldSeedSubsystem.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -34,11 +37,27 @@ bool USurvivalSaveSubsystem::SaveCurrentWorld(const FString& SlotName, int32 Use
 		SaveGame->WorldSeed = SeedSubsystem->GetWorldSeed();
 	}
 
+	if (const UWorldTimeWeatherSubsystem* TimeWeatherSubsystem = GetGameInstance()->GetSubsystem<UWorldTimeWeatherSubsystem>())
+	{
+		SaveGame->WorldTimeWeather = TimeWeatherSubsystem->GetState();
+	}
+
 	if (const APlayerController* PlayerController = UGameplayStatics::GetPlayerController(World, 0))
 	{
 		if (const APawn* Pawn = PlayerController->GetPawn())
 		{
 			SaveGame->PlayerTransform = Pawn->GetActorTransform();
+			if (const USurvivalStatsComponent* Stats = Pawn->FindComponentByClass<USurvivalStatsComponent>())
+			{
+				SaveGame->PlayerHealth = Stats->Health;
+				SaveGame->PlayerHunger = Stats->Hunger;
+				SaveGame->PlayerThirst = Stats->Thirst;
+				SaveGame->PlayerStamina = Stats->Stamina;
+			}
+			if (const UBodyConditionComponent* BodyCondition = Pawn->FindComponentByClass<UBodyConditionComponent>())
+			{
+				SaveGame->BodyCondition = BodyCondition->GetBodyConditionState();
+			}
 			if (const UInventoryComponent* Inventory = Pawn->FindComponentByClass<UInventoryComponent>())
 			{
 				SaveGame->InventorySnapshot = Inventory->GetSnapshot();
@@ -89,11 +108,24 @@ bool USurvivalSaveSubsystem::LoadCurrentWorld(const FString& SlotName, int32 Use
 		SeedSubsystem->ConfigureWorld(LastLoadedSave->WorldName, LastLoadedSave->WorldSeed);
 	}
 
+	if (UWorldTimeWeatherSubsystem* TimeWeatherSubsystem = GetGameInstance()->GetSubsystem<UWorldTimeWeatherSubsystem>())
+	{
+		TimeWeatherSubsystem->RestoreState(LastLoadedSave->WorldTimeWeather);
+	}
+
 	if (APlayerController* PlayerController = UGameplayStatics::GetPlayerController(World, 0))
 	{
 		if (APawn* Pawn = PlayerController->GetPawn())
 		{
 			Pawn->SetActorTransform(LastLoadedSave->PlayerTransform);
+			if (USurvivalStatsComponent* Stats = Pawn->FindComponentByClass<USurvivalStatsComponent>())
+			{
+				Stats->SetSurvivalStats(LastLoadedSave->PlayerHealth, LastLoadedSave->PlayerHunger, LastLoadedSave->PlayerThirst, LastLoadedSave->PlayerStamina);
+			}
+			if (UBodyConditionComponent* BodyCondition = Pawn->FindComponentByClass<UBodyConditionComponent>())
+			{
+				BodyCondition->RestoreBodyCondition(LastLoadedSave->BodyCondition);
+			}
 			if (UInventoryComponent* Inventory = Pawn->FindComponentByClass<UInventoryComponent>())
 			{
 				Inventory->SetSnapshot(LastLoadedSave->InventorySnapshot);

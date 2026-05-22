@@ -18,6 +18,15 @@ public:
 		FSlateRect Bounds;
 	};
 
+	struct FInventoryItemHitBox
+	{
+		FName ItemId = NAME_None;
+		FString DisplayName;
+		FString Category;
+		int32 Count = 0;
+		FSlateRect Bounds;
+	};
+
 protected:
 	virtual int32 NativePaint(
 		const FPaintArgs& Args,
@@ -29,7 +38,13 @@ protected:
 		bool bParentEnabled) const override;
 
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 private:
 	mutable TArray<FRecipeHitBox> RecipeHitBoxes;
+	mutable TArray<FInventoryItemHitBox> InventoryItemHitBoxes;
+	mutable FName HoveredItemId = NAME_None;
+	mutable bool bWasInventoryOpen = false;
+	mutable float InventoryOpenedAtSeconds = 0.0f;
 };

@@ -209,7 +209,12 @@ namespace
 		switch (Category)
 		{
 		case ESurvivalItemCategory::Resource:
+		case ESurvivalItemCategory::RawResource:
 			return TEXT("Rohstoffe");
+		case ESurvivalItemCategory::ProcessedMaterial:
+			return TEXT("Materialien");
+		case ESurvivalItemCategory::NaturalMaterial:
+			return TEXT("Natur");
 		case ESurvivalItemCategory::Tool:
 			return TEXT("Werkzeuge");
 		case ESurvivalItemCategory::Food:
@@ -244,6 +249,18 @@ namespace
 		if (Category == ESurvivalItemCategory::Food)
 		{
 			return FLinearColor(0.82f, 0.22f, 0.20f, 1.0f);
+		}
+		if (Category == ESurvivalItemCategory::ProcessedMaterial)
+		{
+			return FLinearColor(0.66f, 0.58f, 0.40f, 1.0f);
+		}
+		if (Category == ESurvivalItemCategory::NaturalMaterial)
+		{
+			return FLinearColor(0.34f, 0.66f, 0.42f, 1.0f);
+		}
+		if (Category == ESurvivalItemCategory::RawResource)
+		{
+			return FLinearColor(0.48f, 0.54f, 0.50f, 1.0f);
 		}
 		return FLinearColor(0.42f, 0.58f, 0.72f, 1.0f);
 	}
@@ -429,50 +446,6 @@ namespace
 		}
 	}
 
-	void DrawInventoryStack(
-		const FGeometry& Geometry,
-		FSlateWindowElementList& OutDrawElements,
-		int32 LayerId,
-		const FVector2D& Position,
-		const FVector2D& Size,
-		const FString& Label,
-		int32 Count,
-		const FLinearColor& Accent)
-	{
-		const bool bCompact = Size.Y < 52.0f;
-		const float Border = bCompact ? 2.0f : 3.0f;
-		const float IconRadius = bCompact ? 11.0f : 16.0f;
-		const float TextX = bCompact ? 38.0f : 52.0f;
-		const int32 NameFont = bCompact ? 11 : 13;
-		const int32 CountFont = bCompact ? 10 : 12;
-
-		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(4.0f, 5.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.22f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.045f, 0.046f, 0.042f, 0.96f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position, FVector2D(5.0f, Size.Y), Accent.CopyWithNewOpacity(0.88f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(Border, Border), Size - FVector2D(Border * 2.0f, Border * 2.0f), FLinearColor(0.15f, 0.145f, 0.125f, 0.92f));
-
-		const FVector2D IconCenter = Position + FVector2D(bCompact ? 21.0f : 28.0f, Size.Y * 0.5f);
-		DrawFilledCircle(Geometry, OutDrawElements, LayerId + 4, IconCenter, IconRadius, Accent);
-		DrawCircleOutline(Geometry, OutDrawElements, LayerId + 5, IconCenter, IconRadius, FLinearColor(0.015f, 0.014f, 0.012f, 1.0f), 2.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 6, Label, Position + FVector2D(TextX, bCompact ? 8.0f : 12.0f), FLinearColor::White, NameFont, true, Size.X - TextX - 44.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 6, FString::Printf(TEXT("x%d"), Count), Position + FVector2D(Size.X - 36.0f, Size.Y - (bCompact ? 24.0f : 26.0f)), FLinearColor(0.86f, 0.84f, 0.74f, 1.0f), CountFont, true, 34.0f);
-	}
-
-	void DrawInventorySection(
-		const FGeometry& Geometry,
-		FSlateWindowElementList& OutDrawElements,
-		int32 LayerId,
-		const FString& Title,
-		const FVector2D& Position,
-		const FVector2D& Size)
-	{
-		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(5.0f, 7.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.18f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.035f, 0.036f, 0.033f, 0.72f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position, FVector2D(Size.X, 2.0f), FLinearColor(0.64f, 0.56f, 0.38f, 0.42f));
-		DrawText(Geometry, OutDrawElements, LayerId + 3, Title, Position + FVector2D(14.0f, 10.0f), FLinearColor(0.88f, 0.84f, 0.74f, 1.0f), 13, true, Size.X - 28.0f);
-		DrawLine(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(12.0f, 38.0f), Position + FVector2D(Size.X - 12.0f, 38.0f), FLinearColor(0.64f, 0.56f, 0.38f, 0.52f), 1.5f);
-	}
-
 	FString IngredientListText(const FCraftingRecipe& Recipe, const UCraftingComponent* Crafting, const UInventoryComponent* Inventory)
 	{
 		TArray<FString> Parts;
@@ -485,7 +458,349 @@ namespace
 		return FString::Join(Parts, TEXT("   "));
 	}
 
-	void DrawRecipeCard(
+	FString CompactIngredientListText(const FCraftingRecipe& Recipe, const UCraftingComponent* Crafting)
+	{
+		TArray<FString> Parts;
+		for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
+		{
+			const FString Name = Crafting ? Crafting->GetItemDisplayName(Ingredient.ItemId).ToString() : Ingredient.ItemId.ToString();
+			Parts.Add(FString::Printf(TEXT("%dx %s"), Ingredient.Count, *Name));
+		}
+		return FString::Join(Parts, TEXT("  "));
+	}
+
+	float StableNoise(FName ItemId, int32 Salt)
+	{
+		uint32 Hash = GetTypeHash(ItemId) ^ (0x9E3779B9u + static_cast<uint32>(Salt) * 0x85EBCA6Bu);
+		Hash ^= Hash >> 16;
+		Hash *= 0x7FEB352Du;
+		Hash ^= Hash >> 15;
+		Hash *= 0x846CA68Bu;
+		Hash ^= Hash >> 16;
+		return static_cast<float>(Hash & 0xFFFFu) / 65535.0f;
+	}
+
+	FLinearColor ScaleColor(const FLinearColor& Color, float Multiplier, float Alpha)
+	{
+		return FLinearColor(Color.R * Multiplier, Color.G * Multiplier, Color.B * Multiplier, Alpha);
+	}
+
+	bool IsToolLike(FName ItemId, ESurvivalItemCategory Category)
+	{
+		return Category == ESurvivalItemCategory::Tool
+			|| Category == ESurvivalItemCategory::Building
+			|| ItemId == TEXT("Bow")
+			|| ItemId == TEXT("Arrow")
+			|| ItemId == TEXT("Axe")
+			|| ItemId == TEXT("Pickaxe")
+			|| ItemId == TEXT("FishingRod")
+			|| ItemId == TEXT("IronKnife");
+	}
+
+	FVector2D PhysicalItemSize(FName ItemId, ESurvivalItemCategory Category)
+	{
+		if (ItemId == TEXT("Bow") || ItemId == TEXT("FishingRod"))
+		{
+			return FVector2D(116.0f, 42.0f);
+		}
+		if (ItemId == TEXT("Axe") || ItemId == TEXT("Pickaxe") || ItemId == TEXT("IronKnife") || ItemId == TEXT("Arrow"))
+		{
+			return FVector2D(92.0f, 38.0f);
+		}
+		if (ItemId == TEXT("Campfire"))
+		{
+			return FVector2D(94.0f, 68.0f);
+		}
+		if (Category == ESurvivalItemCategory::Food)
+		{
+			return FVector2D(62.0f, 52.0f);
+		}
+		if (Category == ESurvivalItemCategory::RawResource || Category == ESurvivalItemCategory::ProcessedMaterial)
+		{
+			return FVector2D(76.0f, 48.0f);
+		}
+		return FVector2D(64.0f, 48.0f);
+	}
+
+	void DrawFoldedClothSurface(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		const FVector2D& Position,
+		const FVector2D& Size,
+		float TimeSeconds)
+	{
+		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(14.0f, 18.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.30f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.045f, 0.052f, 0.046f, 0.98f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(16.0f, 14.0f), Size - FVector2D(32.0f, 28.0f), FLinearColor(0.078f, 0.088f, 0.072f, 0.92f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(34.0f, 32.0f), Size - FVector2D(68.0f, 64.0f), FLinearColor(0.030f, 0.034f, 0.031f, 0.42f));
+
+		const FLinearColor SeamColor(0.18f, 0.20f, 0.16f, 0.80f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(22.0f, 26.0f), Position + FVector2D(Size.X - 24.0f, 22.0f), SeamColor, 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(20.0f, Size.Y - 26.0f), Position + FVector2D(Size.X - 28.0f, Size.Y - 34.0f), SeamColor, 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(24.0f, 28.0f), Position + FVector2D(32.0f, Size.Y - 30.0f), SeamColor, 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(Size.X - 26.0f, 28.0f), Position + FVector2D(Size.X - 38.0f, Size.Y - 28.0f), SeamColor, 2.0f);
+
+		for (int32 FoldIndex = 0; FoldIndex < 9; ++FoldIndex)
+		{
+			const float Alpha = static_cast<float>(FoldIndex + 1) / 10.0f;
+			const float Wave = FMath::Sin(TimeSeconds * 0.55f + FoldIndex * 0.84f) * 4.0f;
+			const FVector2D Start = Position + FVector2D(Size.X * Alpha, 44.0f + Wave);
+			const FVector2D End = Position + FVector2D(Size.X * Alpha + 24.0f, Size.Y - 46.0f - Wave);
+			DrawLine(Geometry, OutDrawElements, LayerId + 5, Start, End, FLinearColor(0.14f, 0.16f, 0.13f, 0.22f), 1.0f);
+		}
+
+		for (int32 StitchIndex = 0; StitchIndex < 22; ++StitchIndex)
+		{
+			const float X = Position.X + 42.0f + StitchIndex * ((Size.X - 84.0f) / 21.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 6, FVector2D(X, Position.Y + 19.0f), FVector2D(X + 8.0f, Position.Y + 19.0f), FLinearColor(0.42f, 0.38f, 0.26f, 0.36f), 1.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 6, FVector2D(X, Position.Y + Size.Y - 24.0f), FVector2D(X + 8.0f, Position.Y + Size.Y - 24.0f), FLinearColor(0.42f, 0.38f, 0.26f, 0.30f), 1.0f);
+		}
+	}
+
+	void DrawOpenBackpack(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		const FVector2D& Position,
+		const FVector2D& Size)
+	{
+		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(10.0f, 16.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.26f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.052f, 0.047f, 0.036f, 0.94f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(18.0f, 18.0f), Size - FVector2D(36.0f, 36.0f), FLinearColor(0.018f, 0.020f, 0.018f, 0.82f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(12.0f, 18.0f), FVector2D(10.0f, Size.Y - 36.0f), FLinearColor(0.18f, 0.15f, 0.10f, 0.86f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(Size.X - 22.0f, 18.0f), FVector2D(10.0f, Size.Y - 36.0f), FLinearColor(0.18f, 0.15f, 0.10f, 0.86f));
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(22.0f, 36.0f), Position + FVector2D(Size.X - 24.0f, 30.0f), FLinearColor(0.62f, 0.55f, 0.38f, 0.46f), 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 4, Position + FVector2D(26.0f, Size.Y - 42.0f), Position + FVector2D(Size.X - 28.0f, Size.Y - 36.0f), FLinearColor(0.62f, 0.55f, 0.38f, 0.36f), 2.0f);
+		DrawFilledCircle(Geometry, OutDrawElements, LayerId + 5, Position + FVector2D(Size.X * 0.22f, Size.Y * 0.18f), 12.0f, FLinearColor(0.45f, 0.39f, 0.24f, 0.70f));
+		DrawFilledCircle(Geometry, OutDrawElements, LayerId + 5, Position + FVector2D(Size.X * 0.78f, Size.Y * 0.18f), 12.0f, FLinearColor(0.45f, 0.39f, 0.24f, 0.70f));
+	}
+
+	void DrawPhysicalItemObject(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		const FVector2D& Center,
+		const FVector2D& Size,
+		FName ItemId,
+		ESurvivalItemCategory Category,
+		const FLinearColor& Accent,
+		bool bHovered)
+	{
+		const FVector2D ItemPosition = Center - Size * 0.5f;
+		const FLinearColor Body = ScaleColor(Accent, bHovered ? 0.88f : 0.58f, 0.98f);
+		const FLinearColor DarkEdge = ScaleColor(Accent, 0.28f, 0.92f);
+		const FLinearColor Highlight = ScaleColor(Accent, 1.34f, 0.72f);
+
+		DrawBox(Geometry, OutDrawElements, LayerId, ItemPosition + FVector2D(8.0f, 11.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, bHovered ? 0.36f : 0.24f));
+
+		if (ItemId == TEXT("Bow"))
+		{
+			DrawRingArc(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-8.0f, 0.0f), Size.X * 0.42f, -56.0f, 56.0f, Body, 4.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(28.0f, -34.0f), Center + FVector2D(28.0f, 34.0f), FLinearColor(0.82f, 0.78f, 0.60f, 0.92f), 1.2f);
+		}
+		else if (ItemId == TEXT("FishingRod"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(10.0f, Size.Y - 10.0f), ItemPosition + FVector2D(Size.X - 12.0f, 8.0f), Body, 4.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(Size.X - 18.0f, 11.0f), ItemPosition + FVector2D(Size.X - 5.0f, 24.0f), FLinearColor(0.76f, 0.75f, 0.66f, 0.70f), 1.0f);
+			DrawRingArc(Geometry, OutDrawElements, LayerId + 3, ItemPosition + FVector2D(Size.X - 3.0f, 29.0f), 8.0f, 90.0f, 250.0f, FLinearColor(0.76f, 0.75f, 0.66f, 0.70f), 1.5f);
+		}
+		else if (ItemId == TEXT("Axe"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(14.0f, Size.Y - 9.0f), ItemPosition + FVector2D(Size.X - 20.0f, 10.0f), Body, 5.0f);
+			DrawBox(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(Size.X - 34.0f, 5.0f), FVector2D(28.0f, 22.0f), FLinearColor(0.55f, 0.55f, 0.50f, 0.95f));
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, ItemPosition + FVector2D(Size.X - 32.0f, 9.0f), ItemPosition + FVector2D(Size.X - 8.0f, 24.0f), Highlight, 1.0f);
+		}
+		else if (ItemId == TEXT("Pickaxe"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(18.0f, Size.Y - 8.0f), ItemPosition + FVector2D(Size.X - 26.0f, 10.0f), Body, 5.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(Size.X - 54.0f, 8.0f), ItemPosition + FVector2D(Size.X - 4.0f, 17.0f), FLinearColor(0.58f, 0.58f, 0.54f, 0.95f), 5.0f);
+		}
+		else if (ItemId == TEXT("IronKnife") || ItemId == TEXT("StoneBlade") || ItemId == TEXT("Arrow"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(10.0f, Size.Y * 0.58f), ItemPosition + FVector2D(Size.X - 12.0f, Size.Y * 0.40f), ItemId == TEXT("Arrow") ? Body : FLinearColor(0.66f, 0.66f, 0.60f, 0.96f), 4.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(Size.X - 24.0f, Size.Y * 0.34f), ItemPosition + FVector2D(Size.X - 8.0f, Size.Y * 0.40f), Highlight, 1.2f);
+			DrawBox(Geometry, OutDrawElements, LayerId + 3, ItemPosition + FVector2D(7.0f, Size.Y * 0.54f), FVector2D(20.0f, 7.0f), DarkEdge);
+		}
+		else if (ItemId == TEXT("Campfire"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-28.0f, 18.0f), Center + FVector2D(28.0f, -16.0f), Body, 8.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-30.0f, -15.0f), Center + FVector2D(30.0f, 17.0f), Body, 8.0f);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center, 18.0f, FLinearColor(0.86f, 0.34f, 0.13f, 0.42f));
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(0.0f, -2.0f), 9.0f, FLinearColor(1.0f, 0.72f, 0.20f, 0.50f));
+		}
+		else if (ItemId == TEXT("Rope"))
+		{
+			DrawCircleOutline(Geometry, OutDrawElements, LayerId + 1, Center, Size.Y * 0.34f, Body, 4.0f);
+			DrawCircleOutline(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(7.0f, 2.0f), Size.Y * 0.25f, DarkEdge, 2.0f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-18.0f, 14.0f), Center + FVector2D(22.0f, 16.0f), Highlight, 1.0f);
+		}
+		else if (ItemId == TEXT("Stone") || ItemId == TEXT("Flint") || ItemId == TEXT("OreChunk") || ItemId == TEXT("CopperOre") || ItemId == TEXT("IronOre") || ItemId == TEXT("Coal"))
+		{
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-12.0f, 4.0f), Size.Y * 0.34f, Body);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(10.0f, -3.0f), Size.Y * 0.28f, ScaleColor(Accent, 0.48f, 0.95f));
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-21.0f, -2.0f), Center + FVector2D(-4.0f, -11.0f), Highlight, 1.0f);
+		}
+		else if (ItemId == TEXT("Feather"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(8.0f, Size.Y - 8.0f), ItemPosition + FVector2D(Size.X - 8.0f, 9.0f), Body, 2.0f);
+			for (int32 BarbIndex = 0; BarbIndex < 5; ++BarbIndex)
+			{
+				const float T = static_cast<float>(BarbIndex + 1) / 6.0f;
+				const FVector2D Spine = FMath::Lerp(ItemPosition + FVector2D(12.0f, Size.Y - 10.0f), ItemPosition + FVector2D(Size.X - 12.0f, 12.0f), T);
+				DrawLine(Geometry, OutDrawElements, LayerId + 2, Spine, Spine + FVector2D(-12.0f, -6.0f), Body, 1.2f);
+				DrawLine(Geometry, OutDrawElements, LayerId + 2, Spine, Spine + FVector2D(12.0f, 6.0f), Body, 1.2f);
+			}
+		}
+		else if (Category == ESurvivalItemCategory::Food)
+		{
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 1, Center, Size.Y * 0.32f, Body);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-8.0f, -8.0f), Size.Y * 0.11f, Highlight);
+		}
+		else if (ItemId == TEXT("Wood") || ItemId == TEXT("Branch") || ItemId == TEXT("Stick") || ItemId == TEXT("WoodPlank") || ItemId == TEXT("WoodGrip"))
+		{
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(8.0f, Size.Y * 0.32f), FVector2D(Size.X - 16.0f, Size.Y * 0.32f), Body);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(13.0f, Size.Y * 0.42f), ItemPosition + FVector2D(Size.X - 14.0f, Size.Y * 0.36f), Highlight, 1.2f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(18.0f, Size.Y * 0.58f), ItemPosition + FVector2D(Size.X - 20.0f, Size.Y * 0.54f), DarkEdge, 1.0f);
+		}
+		else if (ItemId == TEXT("CopperIngot") || ItemId == TEXT("IronIngot") || ItemId == TEXT("Nail") || ItemId == TEXT("IronHook"))
+		{
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, ItemPosition + FVector2D(10.0f, 13.0f), Size - FVector2D(20.0f, 26.0f), Body);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(14.0f, 16.0f), ItemPosition + FVector2D(Size.X - 14.0f, 16.0f), Highlight, 1.2f);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, ItemPosition + FVector2D(14.0f, Size.Y - 15.0f), ItemPosition + FVector2D(Size.X - 14.0f, Size.Y - 15.0f), DarkEdge, 1.2f);
+		}
+		else
+		{
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 1, Center, Size.Y * 0.34f, Body);
+			DrawCircleOutline(Geometry, OutDrawElements, LayerId + 2, Center, Size.Y * 0.34f, DarkEdge, 1.5f);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-7.0f, -8.0f), Size.Y * 0.09f, Highlight);
+		}
+
+		if (bHovered)
+		{
+			DrawCircleOutline(Geometry, OutDrawElements, LayerId + 5, Center, FMath::Max(Size.X, Size.Y) * 0.42f, FLinearColor(0.94f, 0.86f, 0.58f, 0.68f), 2.0f);
+		}
+	}
+
+	void DrawInventoryCountTag(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		const FVector2D& Center,
+		int32 Count)
+	{
+		if (Count <= 1)
+		{
+			return;
+		}
+
+		const FVector2D Position = Center + FVector2D(18.0f, 12.0f);
+		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(2.0f, 3.0f), FVector2D(34.0f, 20.0f), FLinearColor(0.0f, 0.0f, 0.0f, 0.24f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, FVector2D(34.0f, 20.0f), FLinearColor(0.055f, 0.050f, 0.040f, 0.88f));
+		DrawText(Geometry, OutDrawElements, LayerId + 2, FString::Printf(TEXT("x%d"), Count), Position + FVector2D(7.0f, 2.0f), FLinearColor(0.92f, 0.88f, 0.74f, 1.0f), 10, true, 30.0f);
+	}
+
+	void DrawLaidOutInventoryItem(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		FName HoveredItemId,
+		const FInventoryStack& Stack,
+		const UCraftingComponent* Crafting,
+		const FVector2D& Center,
+		float TimeSeconds)
+	{
+		const ESurvivalItemCategory Category = Crafting ? Crafting->GetItemCategory(Stack.ItemId) : ESurvivalItemCategory::Misc;
+		const FString Label = Crafting ? Crafting->GetItemDisplayName(Stack.ItemId).ToString() : Stack.ItemId.ToString();
+		const FLinearColor Accent = ItemAccentColor(Stack.ItemId, Category);
+		const bool bHovered = Stack.ItemId == HoveredItemId;
+		const FVector2D Size = PhysicalItemSize(Stack.ItemId, Category) * (bHovered ? 1.08f : 1.0f);
+		const float Lift = bHovered ? -5.0f : FMath::Sin(TimeSeconds * 0.82f + StableNoise(Stack.ItemId, 7) * 6.28f) * 0.8f;
+		const FVector2D DrawCenter = Center + FVector2D(0.0f, Lift);
+
+		DrawPhysicalItemObject(Geometry, OutDrawElements, LayerId, DrawCenter, Size, Stack.ItemId, Category, Accent, bHovered);
+		DrawInventoryCountTag(Geometry, OutDrawElements, LayerId + 7, DrawCenter, Stack.Count);
+
+		USurvivalHUDWidget::FInventoryItemHitBox HitBox;
+		HitBox.ItemId = Stack.ItemId;
+		HitBox.DisplayName = Label;
+		HitBox.Category = CategoryLabel(Category);
+		HitBox.Count = Stack.Count;
+		HitBox.Bounds = FSlateRect(DrawCenter.X - Size.X * 0.52f, DrawCenter.Y - Size.Y * 0.58f, DrawCenter.X + Size.X * 0.52f, DrawCenter.Y + Size.Y * 0.64f);
+		ItemHitBoxes.Add(HitBox);
+	}
+
+	void DrawInventoryCluster(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		FName HoveredItemId,
+		const FString& Label,
+		const TArray<FInventoryStack>& Stacks,
+		const UCraftingComponent* Crafting,
+		const FVector2D& Center,
+		const FVector2D& Extent,
+		float TimeSeconds)
+	{
+		if (Stacks.Num() == 0)
+		{
+			return;
+		}
+
+		DrawText(Geometry, OutDrawElements, LayerId, Label, Center - Extent + FVector2D(4.0f, -22.0f), FLinearColor(0.74f, 0.70f, 0.56f, 0.68f), 11, true, 180.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId, Center - Extent + FVector2D(4.0f, -2.0f), Center - Extent + FVector2D(92.0f, -4.0f), FLinearColor(0.64f, 0.58f, 0.38f, 0.26f), 1.0f);
+
+		const int32 Columns = FMath::Clamp(FMath::CeilToInt(FMath::Sqrt(static_cast<float>(Stacks.Num()))), 1, 4);
+		const int32 Rows = FMath::Max(1, FMath::CeilToInt(static_cast<float>(Stacks.Num()) / static_cast<float>(Columns)));
+		const FVector2D CellSize(Extent.X * 2.0f / static_cast<float>(Columns), Extent.Y * 2.0f / static_cast<float>(Rows));
+
+		for (int32 Index = 0; Index < Stacks.Num(); ++Index)
+		{
+			const int32 Column = Index % Columns;
+			const int32 Row = Index / Columns;
+			const FInventoryStack& Stack = Stacks[Index];
+			const FVector2D Base = Center - Extent + FVector2D(CellSize.X * (Column + 0.5f), CellSize.Y * (Row + 0.5f));
+			const FVector2D OrganicOffset(
+				(StableNoise(Stack.ItemId, 1) - 0.5f) * FMath::Min(34.0f, CellSize.X * 0.28f),
+				(StableNoise(Stack.ItemId, 2) - 0.5f) * FMath::Min(26.0f, CellSize.Y * 0.26f));
+
+			DrawLaidOutInventoryItem(Geometry, OutDrawElements, LayerId + 2 + Index * 9, ItemHitBoxes, HoveredItemId, Stack, Crafting, Base + OrganicOffset, TimeSeconds);
+		}
+	}
+
+	void DrawInventoryTooltip(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		const TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		FName HoveredItemId)
+	{
+		if (HoveredItemId.IsNone())
+		{
+			return;
+		}
+
+		for (const USurvivalHUDWidget::FInventoryItemHitBox& HitBox : ItemHitBoxes)
+		{
+			if (HitBox.ItemId != HoveredItemId)
+			{
+				continue;
+			}
+
+			const FVector2D Position(FMath::Min(HitBox.Bounds.Right + 14.0f, HitBox.Bounds.Left + 42.0f), HitBox.Bounds.Top - 8.0f);
+			const FVector2D Size(190.0f, 58.0f);
+			DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(4.0f, 5.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.32f));
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.025f, 0.026f, 0.024f, 0.94f));
+			DrawBox(Geometry, OutDrawElements, LayerId + 2, Position, FVector2D(Size.X, 2.0f), FLinearColor(0.68f, 0.58f, 0.34f, 0.54f));
+			DrawText(Geometry, OutDrawElements, LayerId + 3, HitBox.DisplayName, Position + FVector2D(12.0f, 8.0f), FLinearColor::White, 12, true, Size.X - 24.0f);
+			DrawText(Geometry, OutDrawElements, LayerId + 3, FString::Printf(TEXT("%s   x%d"), *HitBox.Category, HitBox.Count), Position + FVector2D(12.0f, 31.0f), FLinearColor(0.76f, 0.72f, 0.62f, 1.0f), 10, false, Size.X - 24.0f);
+			return;
+		}
+	}
+
+	void DrawCraftingScrap(
 		const FGeometry& Geometry,
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
@@ -497,50 +812,72 @@ namespace
 		const UInventoryComponent* Inventory)
 	{
 		const bool bCanCraft = Crafting && Crafting->CanCraft(Recipe.RecipeId);
-		const FLinearColor CardColor = bCanCraft
-			? FLinearColor(0.075f, 0.105f, 0.090f, 0.96f)
-			: FLinearColor(0.070f, 0.071f, 0.067f, 0.95f);
 		const FLinearColor Accent = bCanCraft
-			? FLinearColor(0.20f, 0.78f, 0.48f, 1.0f)
-			: FLinearColor(0.72f, 0.59f, 0.34f, 1.0f);
-
-		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(4.0f, 6.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.22f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, CardColor);
-		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position, FVector2D(5.0f, Size.Y), Accent);
+			? FLinearColor(0.42f, 0.72f, 0.42f, 1.0f)
+			: FLinearColor(0.62f, 0.52f, 0.34f, 0.78f);
 
 		const FString DisplayName = !Recipe.DisplayName.IsEmpty() ? Recipe.DisplayName.ToString() : Recipe.RecipeId.ToString();
 		const FString OutputName = Crafting ? Crafting->GetItemDisplayName(Recipe.OutputItemId).ToString() : Recipe.OutputItemId.ToString();
-		DrawFilledCircle(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(30.0f, 35.0f), 14.0f, Accent.CopyWithNewOpacity(0.85f));
-		DrawText(Geometry, OutDrawElements, LayerId + 4, DisplayName, Position + FVector2D(54.0f, 12.0f), FLinearColor::White, 15, true, Size.X - 170.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 4, FString::Printf(TEXT("%s x%d"), *OutputName, Recipe.OutputCount), Position + FVector2D(54.0f, 36.0f), FLinearColor(0.88f, 0.84f, 0.70f, 1.0f), 12, false, Size.X - 170.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 4, IngredientListText(Recipe, Crafting, Inventory), Position + FVector2D(18.0f, Size.Y - 30.0f), FLinearColor(0.73f, 0.73f, 0.67f, 1.0f), 11, false, Size.X - 142.0f);
+		const FString Ingredients = Inventory ? IngredientListText(Recipe, Crafting, Inventory) : CompactIngredientListText(Recipe, Crafting);
 
-		const FVector2D ButtonSize(112.0f, 34.0f);
-		const FVector2D ButtonPosition(Position.X + Size.X - ButtonSize.X - 14.0f, Position.Y + Size.Y - ButtonSize.Y - 12.0f);
-		DrawBox(
-			Geometry,
-			OutDrawElements,
-			LayerId + 4,
-			ButtonPosition,
-			ButtonSize,
-			bCanCraft ? FLinearColor(0.17f, 0.52f, 0.32f, 1.0f) : FLinearColor(0.21f, 0.20f, 0.17f, 1.0f));
-		DrawText(
-			Geometry,
-			OutDrawElements,
-			LayerId + 5,
-			bCanCraft ? TEXT("Craften") : TEXT("Material"),
-			ButtonPosition + FVector2D(22.0f, 8.0f),
-			FLinearColor::White,
-			12,
-			true,
-			ButtonSize.X - 20.0f);
+		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(4.0f, 5.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.24f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.42f, 0.37f, 0.26f, bCanCraft ? 0.88f : 0.68f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(5.0f, 5.0f), Size - FVector2D(10.0f, 10.0f), FLinearColor(0.16f, 0.14f, 0.10f, 0.42f));
+		DrawLine(Geometry, OutDrawElements, LayerId + 3, Position + FVector2D(12.0f, 10.0f), Position + FVector2D(Size.X - 16.0f, 7.0f), Accent.CopyWithNewOpacity(0.56f), 2.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 4, DisplayName, Position + FVector2D(13.0f, 12.0f), FLinearColor::White, 12, true, Size.X - 24.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 4, FString::Printf(TEXT("%s x%d"), *OutputName, Recipe.OutputCount), Position + FVector2D(13.0f, 34.0f), FLinearColor(0.91f, 0.86f, 0.68f, 1.0f), 10, false, Size.X - 24.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 4, Ingredients, Position + FVector2D(13.0f, 55.0f), FLinearColor(0.76f, 0.72f, 0.60f, 1.0f), 9, false, Size.X - 26.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 4, bCanCraft ? TEXT("klick") : TEXT("fehlend"), Position + FVector2D(Size.X - 48.0f, Size.Y - 23.0f), Accent, 9, true, 42.0f);
 
 		if (bCanCraft)
 		{
 			USurvivalHUDWidget::FRecipeHitBox HitBox;
 			HitBox.RecipeId = Recipe.RecipeId;
-			HitBox.Bounds = FSlateRect(ButtonPosition.X, ButtonPosition.Y, ButtonPosition.X + ButtonSize.X, ButtonPosition.Y + ButtonSize.Y);
+			HitBox.Bounds = FSlateRect(Position.X, Position.Y, Position.X + Size.X, Position.Y + Size.Y);
 			RecipeHitBoxes.Add(HitBox);
+		}
+	}
+
+	void DrawCraftingArea(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		TArray<USurvivalHUDWidget::FRecipeHitBox>& RecipeHitBoxes,
+		const UCraftingComponent* Crafting,
+		const UInventoryComponent* Inventory,
+		const FVector2D& Position,
+		const FVector2D& Size)
+	{
+		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(8.0f, 10.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.24f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, FLinearColor(0.075f, 0.064f, 0.044f, 0.72f));
+		DrawLine(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(18.0f, 18.0f), Position + FVector2D(Size.X - 22.0f, 12.0f), FLinearColor(0.52f, 0.43f, 0.25f, 0.48f), 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(18.0f, Size.Y - 16.0f), Position + FVector2D(Size.X - 24.0f, Size.Y - 22.0f), FLinearColor(0.52f, 0.43f, 0.25f, 0.38f), 2.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 3, TEXT("Werkflaeche"), Position + FVector2D(18.0f, 18.0f), FLinearColor(0.74f, 0.70f, 0.56f, 0.68f), 11, true, 150.0f);
+
+		if (!Crafting)
+		{
+			return;
+		}
+
+		const TArray<FCraftingRecipe> Recipes = Crafting->GetKnownRecipes();
+		const FVector2D ScrapSize(FMath::Clamp(Size.X * 0.30f, 138.0f, 178.0f), 88.0f);
+		for (int32 Index = 0; Index < Recipes.Num(); ++Index)
+		{
+			if (Index >= 7)
+			{
+				break;
+			}
+
+			const int32 Column = Index % 3;
+			const int32 Row = Index / 3;
+			const FVector2D Base = Position + FVector2D(24.0f + Column * (ScrapSize.X + 16.0f), 48.0f + Row * (ScrapSize.Y + 12.0f));
+			if (Base.X + ScrapSize.X > Position.X + Size.X - 18.0f || Base.Y + ScrapSize.Y > Position.Y + Size.Y - 12.0f)
+			{
+				continue;
+			}
+
+			const FVector2D Offset((StableNoise(Recipes[Index].RecipeId, 12) - 0.5f) * 12.0f, (StableNoise(Recipes[Index].RecipeId, 13) - 0.5f) * 8.0f);
+			DrawCraftingScrap(Geometry, OutDrawElements, LayerId + 5 + Index * 6, RecipeHitBoxes, Base + Offset, ScrapSize, Recipes[Index], Crafting, Inventory);
 		}
 	}
 
@@ -549,10 +886,15 @@ namespace
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FRecipeHitBox>& RecipeHitBoxes,
+		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		FName HoveredItemId,
+		const UUserWidget* Widget,
 		const ASurvivalCharacter* SurvivalCharacter,
-		const FVector2D& ViewSize)
+		const FVector2D& ViewSize,
+		float OpenAlpha)
 	{
 		RecipeHitBoxes.Reset();
+		ItemHitBoxes.Reset();
 		if (!SurvivalCharacter || !SurvivalCharacter->InventoryComponent)
 		{
 			return;
@@ -560,136 +902,72 @@ namespace
 
 		const UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
 		const UCraftingComponent* Crafting = SurvivalCharacter->CraftingComponent;
-		const float PanelMarginX = FMath::Clamp(ViewSize.X * 0.045f, 38.0f, 72.0f);
-		const float PanelMarginY = FMath::Clamp(ViewSize.Y * 0.070f, 46.0f, 72.0f);
-		const FVector2D PanelPosition(PanelMarginX, PanelMarginY);
-		const FVector2D PanelSize(FMath::Max(760.0f, ViewSize.X - PanelMarginX * 2.0f), FMath::Max(540.0f, ViewSize.Y - PanelMarginY * 2.0f - 18.0f));
-
-		DrawBox(Geometry, OutDrawElements, LayerId, FVector2D::ZeroVector, ViewSize, FLinearColor(0.006f, 0.007f, 0.008f, 0.78f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 1, PanelPosition + FVector2D(9.0f, 12.0f), PanelSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.30f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 2, PanelPosition, PanelSize, FLinearColor(0.105f, 0.095f, 0.078f, 0.96f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 3, PanelPosition + FVector2D(14.0f, 14.0f), PanelSize - FVector2D(28.0f, 28.0f), FLinearColor(0.045f, 0.047f, 0.044f, 0.94f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 4, PanelPosition + FVector2D(24.0f, 24.0f), PanelSize - FVector2D(48.0f, 48.0f), FLinearColor(0.085f, 0.080f, 0.066f, 0.40f));
-		DrawText(Geometry, OutDrawElements, LayerId + 5, TEXT("INVENTAR"), PanelPosition + FVector2D(34.0f, 28.0f), FLinearColor::White, 20, true, 280.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 5, TEXT("Tab / Esc schliessen"), PanelPosition + FVector2D(PanelSize.X - 190.0f, 34.0f), FLinearColor(0.76f, 0.74f, 0.66f, 1.0f), 13, false, 170.0f);
-
-		const float TopY = PanelPosition.Y + 84.0f;
-		const float BottomHeight = 108.0f;
-		const float BottomY = PanelPosition.Y + PanelSize.Y - BottomHeight - 28.0f;
-		const float ContentHeight = FMath::Max(280.0f, BottomY - TopY - 20.0f);
-		const float CraftWidth = FMath::Clamp(PanelSize.X * 0.42f, 420.0f, 560.0f);
-		const float SideGap = 30.0f;
-		const float SideWidth = FMath::Max(210.0f, (PanelSize.X - CraftWidth - (SideGap * 4.0f)) * 0.5f);
-		const FVector2D LeftSectionPosition(PanelPosition.X + SideGap, TopY);
-		const FVector2D CraftPanelPosition(PanelPosition.X + (PanelSize.X - CraftWidth) * 0.5f, TopY);
-		const FVector2D RightSectionPosition(PanelPosition.X + PanelSize.X - SideGap - SideWidth, TopY);
-		const FVector2D BottomSectionPosition(PanelPosition.X + SideGap, BottomY);
-		const FVector2D CraftPanelSize(CraftWidth, ContentHeight);
-
-		DrawInventorySection(Geometry, OutDrawElements, LayerId + 5, TEXT("Rucksack"), LeftSectionPosition, FVector2D(SideWidth, ContentHeight));
-		DrawInventorySection(Geometry, OutDrawElements, LayerId + 5, TEXT("Werkzeuge"), RightSectionPosition, FVector2D(SideWidth, ContentHeight));
-		DrawInventorySection(Geometry, OutDrawElements, LayerId + 5, TEXT("Schnellablage"), BottomSectionPosition, FVector2D(PanelSize.X - SideGap * 2.0f, BottomHeight));
-
-		DrawBox(Geometry, OutDrawElements, LayerId + 5, CraftPanelPosition + FVector2D(8.0f, 10.0f), CraftPanelSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.24f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 6, CraftPanelPosition, CraftPanelSize, FLinearColor(0.105f, 0.125f, 0.118f, 0.90f));
-		DrawBox(Geometry, OutDrawElements, LayerId + 7, CraftPanelPosition + FVector2D(12.0f, 12.0f), CraftPanelSize - FVector2D(24.0f, 24.0f), FLinearColor(0.155f, 0.170f, 0.160f, 0.66f));
-		DrawText(Geometry, OutDrawElements, LayerId + 8, TEXT("CRAFTING"), CraftPanelPosition + FVector2D(22.0f, 20.0f), FLinearColor(0.035f, 0.038f, 0.035f, 1.0f), 18, true, CraftPanelSize.X - 44.0f);
+		const float TimeSeconds = Widget && Widget->GetWorld() ? Widget->GetWorld()->GetTimeSeconds() : 0.0f;
+		const float Ease = 1.0f - FMath::Pow(1.0f - FMath::Clamp(OpenAlpha, 0.0f, 1.0f), 3.0f);
+		const float PlaneWidth = FMath::Clamp(ViewSize.X * 0.82f, 700.0f, 1240.0f);
+		const float PlaneHeight = FMath::Clamp(ViewSize.Y * 0.72f, 470.0f, 740.0f);
+		const FVector2D PlaneSize(PlaneWidth, PlaneHeight);
+		const FVector2D CameraDrift(FMath::Sin(TimeSeconds * 0.18f) * 5.0f, (1.0f - Ease) * 48.0f + FMath::Sin(TimeSeconds * 0.13f) * 4.0f);
+		const FVector2D PlanePosition((ViewSize.X - PlaneSize.X) * 0.5f + CameraDrift.X, (ViewSize.Y - PlaneSize.Y) * 0.56f + CameraDrift.Y);
 
 		TArray<FInventoryStack> Stacks = Inventory->GetSortedStacks();
+		TArray<FInventoryStack> RawStacks;
+		TArray<FInventoryStack> ProcessedStacks;
+		TArray<FInventoryStack> NaturalStacks;
+		TArray<FInventoryStack> FoodStacks;
 		TArray<FInventoryStack> ToolStacks;
-		TArray<FInventoryStack> OtherStacks;
+		TArray<FInventoryStack> UtilityStacks;
 		for (const FInventoryStack& Stack : Stacks)
 		{
 			const ESurvivalItemCategory Category = Crafting ? Crafting->GetItemCategory(Stack.ItemId) : ESurvivalItemCategory::Misc;
-			if (Category == ESurvivalItemCategory::Tool)
+			if (IsToolLike(Stack.ItemId, Category))
 			{
 				ToolStacks.Add(Stack);
 			}
+			else if (Category == ESurvivalItemCategory::Food)
+			{
+				FoodStacks.Add(Stack);
+			}
+			else if (Category == ESurvivalItemCategory::RawResource || Category == ESurvivalItemCategory::Resource || Category == ESurvivalItemCategory::Ore)
+			{
+				RawStacks.Add(Stack);
+			}
+			else if (Category == ESurvivalItemCategory::NaturalMaterial)
+			{
+				NaturalStacks.Add(Stack);
+			}
+			else if (Category == ESurvivalItemCategory::ProcessedMaterial)
+			{
+				ProcessedStacks.Add(Stack);
+			}
 			else
 			{
-				OtherStacks.Add(Stack);
+				UtilityStacks.Add(Stack);
 			}
 		}
 
-		const FVector2D StackSize(SideWidth - 36.0f, 58.0f);
-		for (int32 Index = 0; Index < OtherStacks.Num(); ++Index)
-		{
-			const FInventoryStack& Stack = OtherStacks[Index];
-			const ESurvivalItemCategory Category = Crafting ? Crafting->GetItemCategory(Stack.ItemId) : ESurvivalItemCategory::Misc;
-			const FString Label = Crafting ? Crafting->GetItemDisplayName(Stack.ItemId).ToString() : Stack.ItemId.ToString();
-			DrawInventoryStack(
-				Geometry,
-				OutDrawElements,
-				LayerId + 9,
-				LeftSectionPosition + FVector2D(18.0f, 52.0f + Index * 68.0f),
-				StackSize,
-				Label,
-				Stack.Count,
-				ItemAccentColor(Stack.ItemId, Category));
-		}
+		DrawBox(Geometry, OutDrawElements, LayerId, FVector2D::ZeroVector, ViewSize, FLinearColor(0.002f, 0.003f, 0.003f, 0.62f + Ease * 0.22f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, FVector2D::ZeroVector, FVector2D(ViewSize.X, ViewSize.Y * 0.16f), FLinearColor(0.0f, 0.0f, 0.0f, 0.18f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, FVector2D(0.0f, ViewSize.Y * 0.84f), FVector2D(ViewSize.X, ViewSize.Y * 0.16f), FLinearColor(0.0f, 0.0f, 0.0f, 0.22f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, FVector2D::ZeroVector, FVector2D(ViewSize.X * 0.10f, ViewSize.Y), FLinearColor(0.0f, 0.0f, 0.0f, 0.14f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, FVector2D(ViewSize.X * 0.90f, 0.0f), FVector2D(ViewSize.X * 0.10f, ViewSize.Y), FLinearColor(0.0f, 0.0f, 0.0f, 0.16f));
+		DrawFoldedClothSurface(Geometry, OutDrawElements, LayerId + 2, PlanePosition, PlaneSize, TimeSeconds);
 
-		for (int32 Index = 0; Index < ToolStacks.Num(); ++Index)
-		{
-			const FInventoryStack& Stack = ToolStacks[Index];
-			const ESurvivalItemCategory Category = Crafting ? Crafting->GetItemCategory(Stack.ItemId) : ESurvivalItemCategory::Tool;
-			const FString Label = Crafting ? Crafting->GetItemDisplayName(Stack.ItemId).ToString() : Stack.ItemId.ToString();
-			DrawInventoryStack(
-				Geometry,
-				OutDrawElements,
-				LayerId + 9,
-				RightSectionPosition + FVector2D(18.0f, 52.0f + Index * 68.0f),
-				FVector2D(SideWidth - 36.0f, 58.0f),
-				Label,
-				Stack.Count,
-				ItemAccentColor(Stack.ItemId, Category));
-		}
+		const FVector2D BackpackSize(PlaneSize.X * 0.20f, PlaneSize.Y * 0.50f);
+		DrawOpenBackpack(Geometry, OutDrawElements, LayerId + 10, PlanePosition + FVector2D(PlaneSize.X * 0.04f, PlaneSize.Y * 0.22f), BackpackSize);
 
-		for (int32 Index = 0; Index < Stacks.Num(); ++Index)
-		{
-			const FInventoryStack& Stack = Stacks[Index];
-			const ESurvivalItemCategory Category = Crafting ? Crafting->GetItemCategory(Stack.ItemId) : ESurvivalItemCategory::Misc;
-			const float SlotWidth = 132.0f;
-			const float X = BottomSectionPosition.X + 18.0f + Index * (SlotWidth + 12.0f);
-			if (X + SlotWidth > BottomSectionPosition.X + PanelSize.X - SideGap * 2.0f - 18.0f)
-			{
-				break;
-			}
+		DrawText(Geometry, OutDrawElements, LayerId + 14, TEXT("Rucksack ausgelegt"), PlanePosition + FVector2D(34.0f, 28.0f), FLinearColor(0.86f, 0.84f, 0.74f, 0.82f), 14, true, 220.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 14, TEXT("Tab / Esc"), PlanePosition + FVector2D(PlaneSize.X - 96.0f, 28.0f), FLinearColor(0.62f, 0.59f, 0.48f, 0.72f), 11, false, 90.0f);
 
-			DrawInventoryStack(
-				Geometry,
-				OutDrawElements,
-				LayerId + 9,
-				FVector2D(X, BottomSectionPosition.Y + 40.0f),
-				FVector2D(SlotWidth, 46.0f),
-				Crafting ? Crafting->GetItemDisplayName(Stack.ItemId).ToString() : Stack.ItemId.ToString(),
-				Stack.Count,
-				ItemAccentColor(Stack.ItemId, Category));
-		}
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 18, ItemHitBoxes, HoveredItemId, TEXT("Rohstoffe"), RawStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.29f, PlaneSize.Y * 0.37f), FVector2D(PlaneSize.X * 0.14f, PlaneSize.Y * 0.18f), TimeSeconds);
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 60, ItemHitBoxes, HoveredItemId, TEXT("Naturmaterial"), NaturalStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.51f, PlaneSize.Y * 0.31f), FVector2D(PlaneSize.X * 0.13f, PlaneSize.Y * 0.16f), TimeSeconds);
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 102, ItemHitBoxes, HoveredItemId, TEXT("Werkzeug"), ToolStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.75f, PlaneSize.Y * 0.36f), FVector2D(PlaneSize.X * 0.15f, PlaneSize.Y * 0.19f), TimeSeconds);
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 150, ItemHitBoxes, HoveredItemId, TEXT("Materialien"), ProcessedStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.31f, PlaneSize.Y * 0.72f), FVector2D(PlaneSize.X * 0.16f, PlaneSize.Y * 0.17f), TimeSeconds);
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 198, ItemHitBoxes, HoveredItemId, TEXT("Nahrung"), FoodStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.76f, PlaneSize.Y * 0.72f), FVector2D(PlaneSize.X * 0.12f, PlaneSize.Y * 0.15f), TimeSeconds);
+		DrawInventoryCluster(Geometry, OutDrawElements, LayerId + 230, ItemHitBoxes, HoveredItemId, TEXT("Ausrustung"), UtilityStacks, Crafting, PlanePosition + FVector2D(PlaneSize.X * 0.52f, PlaneSize.Y * 0.74f), FVector2D(PlaneSize.X * 0.09f, PlaneSize.Y * 0.12f), TimeSeconds);
 
-		if (Crafting)
-		{
-			const TArray<FCraftingRecipe> Recipes = Crafting->GetKnownRecipes();
-			const FVector2D RecipeStart = CraftPanelPosition + FVector2D(22.0f, 62.0f);
-			const FVector2D RecipeSize(CraftPanelSize.X - 44.0f, 92.0f);
-			for (int32 Index = 0; Index < Recipes.Num(); ++Index)
-			{
-				if (RecipeStart.Y + Index * (RecipeSize.Y + 12.0f) + RecipeSize.Y > CraftPanelPosition.Y + CraftPanelSize.Y - 18.0f)
-				{
-					break;
-				}
-
-				DrawRecipeCard(
-					Geometry,
-					OutDrawElements,
-					LayerId + 9,
-					RecipeHitBoxes,
-					RecipeStart + FVector2D(0.0f, Index * (RecipeSize.Y + 12.0f)),
-					RecipeSize,
-					Recipes[Index],
-					Crafting,
-					Inventory);
-			}
-		}
+		DrawCraftingArea(Geometry, OutDrawElements, LayerId + 270, RecipeHitBoxes, Crafting, Inventory, PlanePosition + FVector2D(PlaneSize.X * 0.40f, PlaneSize.Y * 0.43f), FVector2D(PlaneSize.X * 0.34f, PlaneSize.Y * 0.27f));
+		DrawInventoryTooltip(Geometry, OutDrawElements, LayerId + 340, ItemHitBoxes, HoveredItemId);
 	}
 
 	void DrawLargeMapOverlay(
@@ -734,6 +1012,7 @@ int32 USurvivalHUDWidget::NativePaint(
 {
 	int32 CurrentLayer = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 	RecipeHitBoxes.Reset();
+	InventoryItemHitBoxes.Reset();
 
 	const FVector2D ViewSize = AllottedGeometry.GetLocalSize();
 	const ASurvivalPlayerController* Controller = GetSurvivalController(this);
@@ -746,9 +1025,20 @@ int32 USurvivalHUDWidget::NativePaint(
 
 	if (Controller->IsInventoryOpen())
 	{
-		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, SurvivalCharacter, ViewSize);
-		return CurrentLayer + 30;
+		const float CurrentTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+		if (!bWasInventoryOpen)
+		{
+			InventoryOpenedAtSeconds = CurrentTime;
+			bWasInventoryOpen = true;
+		}
+
+		const float OpenAlpha = FMath::Clamp((CurrentTime - InventoryOpenedAtSeconds) / 0.32f, 0.0f, 1.0f);
+		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, InventoryItemHitBoxes, HoveredItemId, this, SurvivalCharacter, ViewSize, OpenAlpha);
+		return CurrentLayer + 360;
 	}
+
+	bWasInventoryOpen = false;
+	HoveredItemId = NAME_None;
 
 	if (Controller->IsMapOpen())
 	{
@@ -783,5 +1073,48 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		}
 	}
 
+	for (const FInventoryItemHitBox& HitBox : InventoryItemHitBoxes)
+	{
+		if (LocalMousePosition.X >= HitBox.Bounds.Left && LocalMousePosition.X <= HitBox.Bounds.Right
+			&& LocalMousePosition.Y >= HitBox.Bounds.Top && LocalMousePosition.Y <= HitBox.Bounds.Bottom)
+		{
+			if (SurvivalCharacter && SurvivalCharacter->ConsumeInventoryItem(HitBox.ItemId))
+			{
+				return FReply::Handled();
+			}
+		}
+	}
+
 	return FReply::Handled();
+}
+
+FReply USurvivalHUDWidget::NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	const ASurvivalPlayerController* Controller = GetSurvivalController(this);
+	if (!Controller || !Controller->IsInventoryOpen())
+	{
+		HoveredItemId = NAME_None;
+		return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
+	}
+
+	const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+	FName NewHoveredItemId = NAME_None;
+	for (const FInventoryItemHitBox& HitBox : InventoryItemHitBoxes)
+	{
+		if (LocalMousePosition.X >= HitBox.Bounds.Left && LocalMousePosition.X <= HitBox.Bounds.Right
+			&& LocalMousePosition.Y >= HitBox.Bounds.Top && LocalMousePosition.Y <= HitBox.Bounds.Bottom)
+		{
+			NewHoveredItemId = HitBox.ItemId;
+			break;
+		}
+	}
+
+	HoveredItemId = NewHoveredItemId;
+	return FReply::Handled();
+}
+
+void USurvivalHUDWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	HoveredItemId = NAME_None;
+	Super::NativeOnMouseLeave(InMouseEvent);
 }
