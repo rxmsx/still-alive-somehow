@@ -10,7 +10,9 @@ USurvivalStatsComponent::USurvivalStatsComponent()
 void USurvivalStatsComponent::TickSurvival(float DeltaSeconds, bool bIsSprinting)
 {
 	const float HungerMultiplier = bIsSprinting ? SprintHungerMultiplier : 1.0f;
+	const float ThirstMultiplier = bIsSprinting ? SprintThirstMultiplier : 1.0f;
 	Hunger -= HungerDrainPerSecond * HungerMultiplier * DeltaSeconds;
+	Thirst -= ThirstDrainPerSecond * ThirstMultiplier * DeltaSeconds;
 
 	if (bIsSprinting)
 	{
@@ -21,7 +23,7 @@ void USurvivalStatsComponent::TickSurvival(float DeltaSeconds, bool bIsSprinting
 		Stamina += StaminaRecoveryPerSecond * DeltaSeconds;
 	}
 
-	if (Hunger <= 0.0f)
+	if (Hunger <= 0.0f || Thirst <= 0.0f)
 	{
 		Health -= DeltaSeconds;
 	}
@@ -61,6 +63,7 @@ void USurvivalStatsComponent::ClampAndBroadcast()
 {
 	Health = FMath::Clamp(Health, 0.0f, 100.0f);
 	Hunger = FMath::Clamp(Hunger, 0.0f, 100.0f);
+	Thirst = FMath::Clamp(Thirst, 0.0f, 100.0f);
 	Stamina = FMath::Clamp(Stamina, 0.0f, 100.0f);
 	OnStatsChanged.Broadcast();
 }
@@ -71,5 +74,6 @@ void USurvivalStatsComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 
 	DOREPLIFETIME(USurvivalStatsComponent, Health);
 	DOREPLIFETIME(USurvivalStatsComponent, Hunger);
+	DOREPLIFETIME(USurvivalStatsComponent, Thirst);
 	DOREPLIFETIME(USurvivalStatsComponent, Stamina);
 }
