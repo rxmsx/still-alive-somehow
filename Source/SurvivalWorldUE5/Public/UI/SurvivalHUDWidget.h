@@ -15,6 +15,17 @@ public:
 	struct FRecipeHitBox
 	{
 		FName RecipeId = NAME_None;
+		bool bCraftButton = false;
+		FSlateRect Bounds;
+	};
+
+	struct FInventoryItemHitBox
+	{
+		FName ItemId = NAME_None;
+		FString DisplayName;
+		FString Category;
+		FString Description;
+		int32 Count = 0;
 		FSlateRect Bounds;
 	};
 
@@ -29,7 +40,13 @@ protected:
 		bool bParentEnabled) const override;
 
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 
 private:
 	mutable TArray<FRecipeHitBox> RecipeHitBoxes;
+	mutable TArray<FInventoryItemHitBox> InventoryItemHitBoxes;
+	mutable FName HoveredItemId = NAME_None;
+	mutable FName SelectedItemId = NAME_None;
+	mutable FName SelectedRecipeId = NAME_None;
 };

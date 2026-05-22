@@ -155,6 +155,29 @@ ESurvivalItemCategory UCraftingComponent::GetItemCategory(FName ItemId) const
 	return ESurvivalItemCategory::Misc;
 }
 
+bool UCraftingComponent::GetItemDefinition(FName ItemId, FItemDef& OutItem) const
+{
+	if (ItemCatalog)
+	{
+		if (const FItemDef* Item = ItemCatalog->FindItem(ItemId))
+		{
+			OutItem = *Item;
+			return true;
+		}
+	}
+
+	for (const FItemDef& Item : GetDefaultItems())
+	{
+		if (Item.ItemId == ItemId)
+		{
+			OutItem = Item;
+			return true;
+		}
+	}
+
+	return false;
+}
+
 const FCraftingRecipe* UCraftingComponent::FindRecipe(FName RecipeId, FCraftingRecipe& OutFallbackRecipe) const
 {
 	if (ItemCatalog)
@@ -218,23 +241,24 @@ TArray<FItemDef> UCraftingComponent::GetDefaultItems() const
 {
 	TArray<FItemDef> Items;
 
-	auto AddItem = [&Items](FName ItemId, const FText& DisplayName, ESurvivalItemCategory Category, bool bIsTool = false, int32 SortOrder = 0)
+	auto AddItem = [&Items](FName ItemId, const FText& DisplayName, const FText& Description, ESurvivalItemCategory Category, bool bIsTool = false, int32 SortOrder = 0)
 	{
 		FItemDef Item;
 		Item.ItemId = ItemId;
 		Item.DisplayName = DisplayName;
+		Item.Description = Description;
 		Item.Category = Category;
 		Item.bIsTool = bIsTool;
 		Item.SortOrder = SortOrder;
 		Items.Add(Item);
 	};
 
-	AddItem(TEXT("Axe"), NSLOCTEXT("SurvivalWorld", "ItemAxe", "Axe"), ESurvivalItemCategory::Tool, true, 10);
-	AddItem(TEXT("Pickaxe"), NSLOCTEXT("SurvivalWorld", "ItemPickaxe", "Pickaxe"), ESurvivalItemCategory::Tool, true, 20);
-	AddItem(TEXT("Wood"), NSLOCTEXT("SurvivalWorld", "ItemWood", "Wood"), ESurvivalItemCategory::Resource, false, 100);
-	AddItem(TEXT("Stone"), NSLOCTEXT("SurvivalWorld", "ItemStone", "Stone"), ESurvivalItemCategory::Resource, false, 110);
-	AddItem(TEXT("Stick"), NSLOCTEXT("SurvivalWorld", "ItemStick", "Stick"), ESurvivalItemCategory::Resource, false, 120);
-	AddItem(TEXT("StoneBlade"), NSLOCTEXT("SurvivalWorld", "ItemStoneBlade", "Stone Blade"), ESurvivalItemCategory::Tool, true, 130);
+	AddItem(TEXT("Axe"), NSLOCTEXT("SurvivalWorld", "ItemAxe", "Axe"), NSLOCTEXT("SurvivalWorld", "ItemAxeDescription", "A worn chopping tool for gathering wood and breaking light obstacles."), ESurvivalItemCategory::Tool, true, 10);
+	AddItem(TEXT("Pickaxe"), NSLOCTEXT("SurvivalWorld", "ItemPickaxe", "Pickaxe"), NSLOCTEXT("SurvivalWorld", "ItemPickaxeDescription", "A heavy tool for stone and ore work."), ESurvivalItemCategory::Tool, true, 20);
+	AddItem(TEXT("Wood"), NSLOCTEXT("SurvivalWorld", "ItemWood", "Wood"), NSLOCTEXT("SurvivalWorld", "ItemWoodDescription", "Dry salvaged wood suitable for fire, repair and basic crafting."), ESurvivalItemCategory::Resource, false, 100);
+	AddItem(TEXT("Stone"), NSLOCTEXT("SurvivalWorld", "ItemStone", "Stone"), NSLOCTEXT("SurvivalWorld", "ItemStoneDescription", "A dense stone with sharp workable edges."), ESurvivalItemCategory::Resource, false, 110);
+	AddItem(TEXT("Stick"), NSLOCTEXT("SurvivalWorld", "ItemStick", "Stick"), NSLOCTEXT("SurvivalWorld", "ItemStickDescription", "A straight stick for lashings, handles and simple tools."), ESurvivalItemCategory::Resource, false, 120);
+	AddItem(TEXT("StoneBlade"), NSLOCTEXT("SurvivalWorld", "ItemStoneBlade", "Stone Blade"), NSLOCTEXT("SurvivalWorld", "ItemStoneBladeDescription", "A primitive chipped blade. Fragile, but better than bare hands."), ESurvivalItemCategory::Tool, true, 130);
 
 	return Items;
 }

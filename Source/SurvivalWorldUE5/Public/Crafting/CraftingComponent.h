@@ -48,6 +48,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Crafting")
 	ESurvivalItemCategory GetItemCategory(FName ItemId) const;
 
+	UFUNCTION(BlueprintPure, Category = "Crafting")
+	bool GetItemDefinition(FName ItemId, FItemDef& OutItem) const;
+
 protected:
 	virtual void BeginPlay() override;
 
