@@ -82,4 +82,5 @@ protected:
 	void LookUp(float Value);
 	void AddStarterItems();
 	void RefreshMovementSpeed();
+	bool IsInventoryOpen() const;
 };

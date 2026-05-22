@@ -2,6 +2,7 @@
 #include "EnhancedInputComponent.h"
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
+#include "Player/SurvivalPlayerController.h"
 #include "Survival/SurvivalStatsComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -37,6 +38,11 @@ void ASurvivalCharacter::BeginPlay()
 void ASurvivalCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (IsInventoryOpen())
+	{
+		bWantsToSprint = false;
+	}
 
 	if (SurvivalStatsComponent)
 	{
@@ -125,6 +131,11 @@ bool ASurvivalCharacter::UseInteract()
 
 void ASurvivalCharacter::Move(const FInputActionValue& Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	const FVector2D MovementVector = Value.Get<FVector2D>();
 	MoveForward(MovementVector.Y);
 	MoveRight(MovementVector.X);
@@ -132,6 +143,11 @@ void ASurvivalCharacter::Move(const FInputActionValue& Value)
 
 void ASurvivalCharacter::Look(const FInputActionValue& Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	AddControllerYawInput(LookAxisVector.X);
 	AddControllerPitchInput(LookAxisVector.Y);
@@ -139,6 +155,11 @@ void ASurvivalCharacter::Look(const FInputActionValue& Value)
 
 void ASurvivalCharacter::StartSprint()
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	bWantsToSprint = true;
 	RefreshMovementSpeed();
 }
@@ -151,6 +172,11 @@ void ASurvivalCharacter::StopSprint()
 
 void ASurvivalCharacter::StartJump()
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	Jump();
 }
 
@@ -161,11 +187,21 @@ void ASurvivalCharacter::StopJump()
 
 void ASurvivalCharacter::HandleInteractInput()
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	UseInteract();
 }
 
 void ASurvivalCharacter::MoveForward(float Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorForwardVector(), Value);
@@ -174,6 +210,11 @@ void ASurvivalCharacter::MoveForward(float Value)
 
 void ASurvivalCharacter::MoveRight(float Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorRightVector(), Value);
@@ -182,11 +223,21 @@ void ASurvivalCharacter::MoveRight(float Value)
 
 void ASurvivalCharacter::Turn(float Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	AddControllerYawInput(Value);
 }
 
 void ASurvivalCharacter::LookUp(float Value)
 {
+	if (IsInventoryOpen())
+	{
+		return;
+	}
+
 	AddControllerPitchInput(Value);
 }
 
@@ -210,6 +261,12 @@ void ASurvivalCharacter::RefreshMovementSpeed()
 
 	const bool bCanSprint = bWantsToSprint && (!SurvivalStatsComponent || SurvivalStatsComponent->Stamina > 1.0f);
 	GetCharacterMovement()->MaxWalkSpeed = bCanSprint ? SprintSpeed : WalkSpeed;
+}
+
+bool ASurvivalCharacter::IsInventoryOpen() const
+{
+	const ASurvivalPlayerController* SurvivalController = Cast<ASurvivalPlayerController>(GetController());
+	return SurvivalController && SurvivalController->IsInventoryOpen();
 }
 
 void ASurvivalCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

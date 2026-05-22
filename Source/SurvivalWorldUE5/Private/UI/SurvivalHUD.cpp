@@ -3,6 +3,7 @@
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
 #include "Player/SurvivalCharacter.h"
+#include "Player/SurvivalPlayerController.h"
 #include "Resources/ResourceNodeActor.h"
 #include "Resources/ResourceNodeComponent.h"
 #include "Survival/SurvivalStatsComponent.h"
@@ -31,6 +32,15 @@ void ASurvivalHUD::DrawHUD()
 	if (!SurvivalCharacter)
 	{
 		return;
+	}
+
+	if (const ASurvivalPlayerController* SurvivalController = Cast<ASurvivalPlayerController>(PlayerOwner))
+	{
+		if (SurvivalController->IsInventoryOpen())
+		{
+			DrawInventoryOverlay(SurvivalCharacter);
+			return;
+		}
 	}
 
 	DrawSurvivalMinimap(SurvivalCharacter);
@@ -76,6 +86,141 @@ void ASurvivalHUD::DrawInventorySummary(const ASurvivalCharacter* SurvivalCharac
 		Inventory->GetItemCount(FName(TEXT("Stone"))));
 
 	DrawText(InventoryText, FLinearColor::White, HudMargin, HudMargin + (MinimapOuterRadius * 2.0f) + 26.0f, nullptr, 0.82f);
+}
+
+void ASurvivalHUD::DrawInventoryOverlay(const ASurvivalCharacter* SurvivalCharacter)
+{
+	if (!Canvas || !SurvivalCharacter || !SurvivalCharacter->InventoryComponent)
+	{
+		return;
+	}
+
+	const UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
+	const float ScreenW = static_cast<float>(Canvas->SizeX);
+	const float ScreenH = static_cast<float>(Canvas->SizeY);
+	const FVector2D ScreenCenter(ScreenW * 0.5f, ScreenH * 0.5f);
+	const FVector2D SlotSize(82.0f, 82.0f);
+	const float Gap = 12.0f;
+
+	DrawRect(FLinearColor(0.01f, 0.008f, 0.006f, 0.82f), 0.0f, 0.0f, ScreenW, ScreenH);
+	DrawRect(FLinearColor(0.36f, 0.26f, 0.13f, 0.62f), ScreenCenter.X - 470.0f, ScreenCenter.Y - 250.0f, 940.0f, 500.0f);
+	DrawRect(FLinearColor(0.07f, 0.06f, 0.05f, 0.88f), ScreenCenter.X - 445.0f, ScreenCenter.Y - 225.0f, 890.0f, 450.0f);
+
+	DrawText(TEXT("INVENTAR"), FLinearColor::White, ScreenCenter.X - 430.0f, ScreenCenter.Y - 214.0f, nullptr, 1.2f);
+	DrawText(TEXT("TAB schließen"), FLinearColor(0.78f, 0.78f, 0.72f, 1.0f), ScreenCenter.X + 318.0f, ScreenCenter.Y - 208.0f, nullptr, 0.8f);
+
+	DrawCraftingPanel(ScreenCenter + FVector2D(-150.0f, -105.0f), FVector2D(300.0f, 210.0f));
+
+	const TMap<FName, int32>& Snapshot = Inventory->GetSnapshot();
+	TArray<FName> DisplayItems;
+	DisplayItems.Add(FName(TEXT("Axe")));
+	DisplayItems.Add(FName(TEXT("Pickaxe")));
+	DisplayItems.Add(FName(TEXT("Wood")));
+	DisplayItems.Add(FName(TEXT("Stone")));
+
+	for (const TPair<FName, int32>& Pair : Snapshot)
+	{
+		if (!DisplayItems.Contains(Pair.Key))
+		{
+			DisplayItems.Add(Pair.Key);
+		}
+	}
+
+	const FVector2D LeftStart(ScreenCenter.X - 420.0f, ScreenCenter.Y - 156.0f);
+	const FVector2D RightStart(ScreenCenter.X + 338.0f, ScreenCenter.Y - 156.0f);
+	const FVector2D BottomStart(ScreenCenter.X - 334.0f, ScreenCenter.Y + 148.0f);
+	const FVector2D TopStart(ScreenCenter.X - 244.0f, ScreenCenter.Y - 210.0f);
+
+	int32 ItemIndex = 0;
+	auto DrawItemOrEmpty = [&](const FVector2D& Position)
+	{
+		FString Label;
+		int32 Count = 0;
+		FLinearColor AccentColor(0.35f, 0.32f, 0.26f, 1.0f);
+		if (DisplayItems.IsValidIndex(ItemIndex))
+		{
+			const FName ItemId = DisplayItems[ItemIndex];
+			Count = Snapshot.FindRef(ItemId);
+			if (Count > 0)
+			{
+				Label = ItemId.ToString();
+				if (ItemId == FName(TEXT("Wood")))
+				{
+					AccentColor = FLinearColor(0.26f, 0.58f, 0.24f, 1.0f);
+				}
+				else if (ItemId == FName(TEXT("Stone")))
+				{
+					AccentColor = FLinearColor(0.66f, 0.66f, 0.60f, 1.0f);
+				}
+				else
+				{
+					AccentColor = FLinearColor(0.78f, 0.56f, 0.24f, 1.0f);
+				}
+			}
+		}
+
+		DrawInventorySlot(Position, SlotSize, Label, Count, AccentColor);
+		++ItemIndex;
+	};
+
+	for (int32 Row = 0; Row < 4; ++Row)
+	{
+		DrawItemOrEmpty(LeftStart + FVector2D(0.0f, Row * (SlotSize.Y + Gap)));
+		DrawItemOrEmpty(RightStart + FVector2D(0.0f, Row * (SlotSize.Y + Gap)));
+	}
+
+	for (int32 Column = 0; Column < 6; ++Column)
+	{
+		DrawItemOrEmpty(BottomStart + FVector2D(Column * (SlotSize.X + Gap), 0.0f));
+	}
+
+	for (int32 Column = 0; Column < 4; ++Column)
+	{
+		DrawItemOrEmpty(TopStart + FVector2D(Column * (SlotSize.X + Gap), 0.0f));
+	}
+}
+
+void ASurvivalHUD::DrawInventorySlot(const FVector2D& Position, const FVector2D& Size, const FString& Label, int32 Count, const FLinearColor& AccentColor)
+{
+	DrawRect(FLinearColor(0.02f, 0.018f, 0.014f, 0.92f), Position.X, Position.Y, Size.X, Size.Y);
+	DrawRect(FLinearColor(0.50f, 0.38f, 0.18f, 0.72f), Position.X + 3.0f, Position.Y + 3.0f, Size.X - 6.0f, Size.Y - 6.0f);
+	DrawRect(FLinearColor(0.18f, 0.15f, 0.11f, 0.95f), Position.X + 7.0f, Position.Y + 7.0f, Size.X - 14.0f, Size.Y - 14.0f);
+
+	if (Count <= 0 || Label.IsEmpty())
+	{
+		return;
+	}
+
+	const FVector2D IconCenter = Position + FVector2D(Size.X * 0.5f, Size.Y * 0.43f);
+	DrawFilledCircle(IconCenter, 18.0f, AccentColor);
+	DrawCircleOutline(IconCenter, 18.0f, FLinearColor(0.02f, 0.02f, 0.02f, 1.0f), 2.0f);
+	DrawText(Label, FLinearColor::White, Position.X + 10.0f, Position.Y + Size.Y - 24.0f, nullptr, 0.67f);
+	DrawText(FString::Printf(TEXT("x%d"), Count), FLinearColor::White, Position.X + Size.X - 30.0f, Position.Y + 8.0f, nullptr, 0.72f);
+}
+
+void ASurvivalHUD::DrawCraftingPanel(const FVector2D& PanelPosition, const FVector2D& PanelSize)
+{
+	DrawRect(FLinearColor(0.10f, 0.11f, 0.11f, 0.96f), PanelPosition.X, PanelPosition.Y, PanelSize.X, PanelSize.Y);
+	DrawRect(FLinearColor(0.40f, 0.43f, 0.42f, 0.92f), PanelPosition.X + 8.0f, PanelPosition.Y + 8.0f, PanelSize.X - 16.0f, PanelSize.Y - 16.0f);
+	DrawText(TEXT("CRAFTING"), FLinearColor(0.05f, 0.05f, 0.045f, 1.0f), PanelPosition.X + 18.0f, PanelPosition.Y + 16.0f, nullptr, 1.05f);
+
+	const FVector2D CraftSlotSize(58.0f, 58.0f);
+	const FVector2D GridStart = PanelPosition + FVector2D(32.0f, 58.0f);
+	for (int32 Row = 0; Row < 2; ++Row)
+	{
+		for (int32 Column = 0; Column < 2; ++Column)
+		{
+			DrawInventorySlot(GridStart + FVector2D(Column * 70.0f, Row * 70.0f), CraftSlotSize, TEXT(""), 0, FLinearColor::White);
+		}
+	}
+
+	const FVector2D ArrowStart = PanelPosition + FVector2D(174.0f, 111.0f);
+	DrawLine(ArrowStart.X, ArrowStart.Y, ArrowStart.X + 34.0f, ArrowStart.Y, FLinearColor(0.06f, 0.06f, 0.055f, 1.0f), 4.0f);
+	DrawLine(ArrowStart.X + 34.0f, ArrowStart.Y, ArrowStart.X + 24.0f, ArrowStart.Y - 8.0f, FLinearColor(0.06f, 0.06f, 0.055f, 1.0f), 4.0f);
+	DrawLine(ArrowStart.X + 34.0f, ArrowStart.Y, ArrowStart.X + 24.0f, ArrowStart.Y + 8.0f, FLinearColor(0.06f, 0.06f, 0.055f, 1.0f), 4.0f);
+
+	DrawInventorySlot(PanelPosition + FVector2D(222.0f, 82.0f), CraftSlotSize, TEXT(""), 0, FLinearColor::White);
+	DrawText(TEXT("Rezept folgt"), FLinearColor(0.08f, 0.08f, 0.075f, 1.0f), PanelPosition.X + 172.0f, PanelPosition.Y + 154.0f, nullptr, 0.72f);
 }
 
 void ASurvivalHUD::DrawCrosshairAndPrompt(const ASurvivalCharacter* SurvivalCharacter)

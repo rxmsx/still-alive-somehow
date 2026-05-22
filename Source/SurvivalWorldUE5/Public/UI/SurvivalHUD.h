@@ -17,6 +17,9 @@ public:
 protected:
 	void DrawSurvivalMinimap(const ASurvivalCharacter* SurvivalCharacter);
 	void DrawInventorySummary(const ASurvivalCharacter* SurvivalCharacter);
+	void DrawInventoryOverlay(const ASurvivalCharacter* SurvivalCharacter);
+	void DrawInventorySlot(const FVector2D& Position, const FVector2D& Size, const FString& Label, int32 Count, const FLinearColor& AccentColor);
+	void DrawCraftingPanel(const FVector2D& PanelPosition, const FVector2D& PanelSize);
 	void DrawCrosshairAndPrompt(const ASurvivalCharacter* SurvivalCharacter);
 	void DrawMapBackground(const FVector2D& Center, float Radius);
 	void DrawMapResources(const FVector2D& Center, float Radius, const ASurvivalCharacter* SurvivalCharacter);
