@@ -24,13 +24,22 @@ public:
 	float Hunger = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float Thirst = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float Stamina = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
 	float HungerDrainPerSecond = 0.015f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
+	float ThirstDrainPerSecond = 0.025f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
 	float SprintHungerMultiplier = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
+	float SprintThirstMultiplier = 2.4f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
 	float SprintStaminaDrainPerSecond = 12.0f;
