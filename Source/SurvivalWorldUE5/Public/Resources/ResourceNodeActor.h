@@ -6,6 +6,7 @@
 #include "ResourceNodeActor.generated.h"
 
 class UResourceNodeComponent;
+class UMapMarkerComponent;
 class UStaticMeshComponent;
 
 UCLASS(BlueprintType, Blueprintable)
@@ -25,6 +26,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Resource")
 	TObjectPtr<UResourceNodeComponent> ResourceNodeComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Map")
+	TObjectPtr<UMapMarkerComponent> MapMarkerComponent;
+
 	virtual FText GetInteractionPrompt_Implementation(const AActor* InteractingActor) const override;
 	virtual bool CanInteract_Implementation(const AActor* InteractingActor) const override;
 	virtual bool Interact_Implementation(AActor* InteractingActor) override;
@@ -35,5 +39,6 @@ protected:
 	UFUNCTION()
 	void HandleResourceHarvested(int32 RemainingHarvests);
 
+	void RefreshMapMarker();
 	void RefreshDepletedState();
 };

@@ -1,4 +1,5 @@
 #include "Player/SurvivalCharacter.h"
+#include "Crafting/CraftingComponent.h"
 #include "EnhancedInputComponent.h"
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
@@ -23,6 +24,7 @@ ASurvivalCharacter::ASurvivalCharacter()
 	FirstPersonCamera->bUsePawnControlRotation = true;
 
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
+	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("Crafting"));
 	SurvivalStatsComponent = CreateDefaultSubobject<USurvivalStatsComponent>(TEXT("SurvivalStats"));
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
@@ -39,7 +41,7 @@ void ASurvivalCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		bWantsToSprint = false;
 	}
@@ -131,7 +133,7 @@ bool ASurvivalCharacter::UseInteract()
 
 void ASurvivalCharacter::Move(const FInputActionValue& Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -143,7 +145,7 @@ void ASurvivalCharacter::Move(const FInputActionValue& Value)
 
 void ASurvivalCharacter::Look(const FInputActionValue& Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -155,7 +157,7 @@ void ASurvivalCharacter::Look(const FInputActionValue& Value)
 
 void ASurvivalCharacter::StartSprint()
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -172,7 +174,7 @@ void ASurvivalCharacter::StopSprint()
 
 void ASurvivalCharacter::StartJump()
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -187,7 +189,7 @@ void ASurvivalCharacter::StopJump()
 
 void ASurvivalCharacter::HandleInteractInput()
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -197,7 +199,7 @@ void ASurvivalCharacter::HandleInteractInput()
 
 void ASurvivalCharacter::MoveForward(float Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -210,7 +212,7 @@ void ASurvivalCharacter::MoveForward(float Value)
 
 void ASurvivalCharacter::MoveRight(float Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -223,7 +225,7 @@ void ASurvivalCharacter::MoveRight(float Value)
 
 void ASurvivalCharacter::Turn(float Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -233,7 +235,7 @@ void ASurvivalCharacter::Turn(float Value)
 
 void ASurvivalCharacter::LookUp(float Value)
 {
-	if (IsInventoryOpen())
+	if (IsGameplayInputBlocked())
 	{
 		return;
 	}
@@ -263,10 +265,10 @@ void ASurvivalCharacter::RefreshMovementSpeed()
 	GetCharacterMovement()->MaxWalkSpeed = bCanSprint ? SprintSpeed : WalkSpeed;
 }
 
-bool ASurvivalCharacter::IsInventoryOpen() const
+bool ASurvivalCharacter::IsGameplayInputBlocked() const
 {
 	const ASurvivalPlayerController* SurvivalController = Cast<ASurvivalPlayerController>(GetController());
-	return SurvivalController && SurvivalController->IsInventoryOpen();
+	return SurvivalController && SurvivalController->IsGameplayInputBlocked();
 }
 
 void ASurvivalCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

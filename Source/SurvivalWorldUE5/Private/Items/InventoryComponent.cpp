@@ -58,6 +58,16 @@ TMap<FName, int32> UInventoryComponent::GetInventorySnapshot() const
 	return ItemCounts;
 }
 
+TArray<FInventoryStack> UInventoryComponent::GetSortedStacks() const
+{
+	TArray<FInventoryStack> SortedStacks = ReplicatedStacks;
+	SortedStacks.Sort([](const FInventoryStack& Left, const FInventoryStack& Right)
+	{
+		return Left.ItemId.LexicalLess(Right.ItemId);
+	});
+	return SortedStacks;
+}
+
 void UInventoryComponent::SetSnapshot(const TMap<FName, int32>& NewItemCounts)
 {
 	ItemCounts.Empty();

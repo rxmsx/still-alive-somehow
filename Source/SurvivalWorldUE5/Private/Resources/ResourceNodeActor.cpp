@@ -1,4 +1,5 @@
 #include "Resources/ResourceNodeActor.h"
+#include "Map/MapMarkerComponent.h"
 #include "Resources/ResourceNodeComponent.h"
 #include "Components/StaticMeshComponent.h"
 
@@ -16,6 +17,10 @@ AResourceNodeActor::AResourceNodeActor()
 	MeshComponent->SetCollisionResponseToAllChannels(ECR_Block);
 
 	ResourceNodeComponent = CreateDefaultSubobject<UResourceNodeComponent>(TEXT("ResourceNode"));
+
+	MapMarkerComponent = CreateDefaultSubobject<UMapMarkerComponent>(TEXT("MapMarker"));
+	MapMarkerComponent->MarkerType = ESurvivalMapMarkerType::Resource;
+	MapMarkerComponent->MarkerColor = FLinearColor(0.82f, 0.82f, 0.72f, 1.0f);
 }
 
 void AResourceNodeActor::BeginPlay()
@@ -27,6 +32,7 @@ void AResourceNodeActor::BeginPlay()
 		ResourceNodeComponent->OnResourceHarvested.AddDynamic(this, &AResourceNodeActor::HandleResourceHarvested);
 	}
 
+	RefreshMapMarker();
 	RefreshDepletedState();
 }
 
@@ -72,6 +78,32 @@ void AResourceNodeActor::HandleResourceHarvested(int32 RemainingHarvests)
 	RefreshDepletedState();
 }
 
+void AResourceNodeActor::RefreshMapMarker()
+{
+	if (!MapMarkerComponent || !ResourceNodeComponent)
+	{
+		return;
+	}
+
+	MapMarkerComponent->MarkerId = ResourceNodeComponent->StableResourceId.IsEmpty()
+		? FName(*GetName())
+		: FName(*ResourceNodeComponent->StableResourceId);
+	MapMarkerComponent->DisplayName = FText::FromName(ResourceNodeComponent->OutputItemId);
+
+	if (ResourceNodeComponent->OutputItemId == TEXT("Wood"))
+	{
+		MapMarkerComponent->MarkerColor = FLinearColor(0.23f, 0.86f, 0.38f, 1.0f);
+	}
+	else if (ResourceNodeComponent->OutputItemId == TEXT("Stone"))
+	{
+		MapMarkerComponent->MarkerColor = FLinearColor(0.82f, 0.82f, 0.72f, 1.0f);
+	}
+	else
+	{
+		MapMarkerComponent->MarkerColor = FLinearColor(0.72f, 0.62f, 0.92f, 1.0f);
+	}
+}
+
 void AResourceNodeActor::RefreshDepletedState()
 {
 	if (!MeshComponent || !ResourceNodeComponent)
@@ -82,4 +114,9 @@ void AResourceNodeActor::RefreshDepletedState()
 	const bool bDepleted = ResourceNodeComponent->IsDepleted();
 	MeshComponent->SetVisibility(!bDepleted, true);
 	MeshComponent->SetCollisionEnabled(bDepleted ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryAndPhysics);
+
+	if (MapMarkerComponent)
+	{
+		MapMarkerComponent->bShowOnMinimap = !bDepleted;
+	}
 }

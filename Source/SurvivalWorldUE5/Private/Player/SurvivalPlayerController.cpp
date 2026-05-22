@@ -8,6 +8,8 @@ void ASurvivalPlayerController::SetupInputComponent()
 	if (InputComponent)
 	{
 		InputComponent->BindAction(TEXT("ToggleInventory"), IE_Pressed, this, &ASurvivalPlayerController::ToggleInventory);
+		InputComponent->BindAction(TEXT("ToggleMap"), IE_Pressed, this, &ASurvivalPlayerController::ToggleMap);
+		InputComponent->BindAction(TEXT("CloseUI"), IE_Pressed, this, &ASurvivalPlayerController::CloseOpenUI);
 	}
 }
 
@@ -31,18 +33,29 @@ void ASurvivalPlayerController::BeginPlay()
 
 void ASurvivalPlayerController::ToggleInventory()
 {
-	SetInventoryOpen(!bInventoryOpen);
+	SetUIState(IsInventoryOpen() ? ESurvivalUIState::None : ESurvivalUIState::Inventory);
 }
 
-void ASurvivalPlayerController::SetInventoryOpen(bool bNewInventoryOpen)
+void ASurvivalPlayerController::ToggleMap()
 {
-	bInventoryOpen = bNewInventoryOpen;
-	bShowMouseCursor = bInventoryOpen;
+	SetUIState(IsMapOpen() ? ESurvivalUIState::None : ESurvivalUIState::Map);
+}
 
-	if (bInventoryOpen)
+void ASurvivalPlayerController::CloseOpenUI()
+{
+	SetUIState(ESurvivalUIState::None);
+}
+
+void ASurvivalPlayerController::SetUIState(ESurvivalUIState NewUIState)
+{
+	UIState = NewUIState;
+	bShowMouseCursor = UIState != ESurvivalUIState::None;
+
+	if (UIState != ESurvivalUIState::None)
 	{
 		FInputModeGameAndUI InputMode;
 		InputMode.SetHideCursorDuringCapture(false);
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 		SetInputMode(InputMode);
 	}
 	else

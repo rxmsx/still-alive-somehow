@@ -5,6 +5,7 @@
 #include "SurvivalCharacter.generated.h"
 
 class UCameraComponent;
+class UCraftingComponent;
 class UInputAction;
 class UInputMappingContext;
 class UInventoryComponent;
@@ -28,6 +29,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
+	TObjectPtr<UCraftingComponent> CraftingComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Survival")
 	TObjectPtr<USurvivalStatsComponent> SurvivalStatsComponent;
@@ -82,5 +86,5 @@ protected:
 	void LookUp(float Value);
 	void AddStarterItems();
 	void RefreshMovementSpeed();
-	bool IsInventoryOpen() const;
+	bool IsGameplayInputBlocked() const;
 };

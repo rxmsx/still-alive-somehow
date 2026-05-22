@@ -4,6 +4,8 @@
 #include "Engine/DeveloperSettings.h"
 #include "OpenWorldPrototypeSettings.generated.h"
 
+class USurvivalItemCatalog;
+
 UCLASS(Config = Game, DefaultConfig, meta = (DisplayName = "Open World Prototype"))
 class SURVIVALWORLDUE5_API UOpenWorldPrototypeSettings : public UDeveloperSettings
 {
@@ -27,4 +29,7 @@ public:
 
 	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "World")
 	bool bUsePCGForResourcePlacement = true;
+
+	UPROPERTY(Config, EditAnywhere, BlueprintReadOnly, Category = "Data")
+	TSoftObjectPtr<USurvivalItemCatalog> ItemCatalog;
 };

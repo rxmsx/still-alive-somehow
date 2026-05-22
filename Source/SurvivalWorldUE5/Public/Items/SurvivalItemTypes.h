@@ -4,6 +4,8 @@
 #include "Engine/DataAsset.h"
 #include "SurvivalItemTypes.generated.h"
 
+class UTexture2D;
+
 UENUM(BlueprintType)
 enum class ESurvivalItemCategory : uint8
 {
@@ -26,11 +28,20 @@ struct SURVIVALWORLDUE5_API FItemDef
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FText DisplayName;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (MultiLine = true))
+	FText Description;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	ESurvivalItemCategory Category = ESurvivalItemCategory::Misc;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TObjectPtr<UTexture2D> Icon = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
 	int32 MaxStack = 99;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int32 SortOrder = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsTool = false;
@@ -55,6 +66,15 @@ struct SURVIVALWORLDUE5_API FCraftingRecipe
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName RecipeId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText DisplayName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (MultiLine = true))
+	FText Description;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bUnlockedByDefault = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FCraftingIngredient> Ingredients;
@@ -146,6 +166,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<FCraftingRecipe> Recipes;
+
+	const FItemDef* FindItem(FName ItemId) const;
+	const FCraftingRecipe* FindRecipe(FName RecipeId) const;
 };
 
 UCLASS(BlueprintType)

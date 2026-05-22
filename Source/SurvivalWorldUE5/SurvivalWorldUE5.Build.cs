@@ -13,7 +13,10 @@ public class SurvivalWorldUE5 : ModuleRules
 			"Engine",
 			"EnhancedInput",
 			"InputCore",
-			"DeveloperSettings"
+			"DeveloperSettings",
+			"UMG",
+			"Slate",
+			"SlateCore"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new[]
