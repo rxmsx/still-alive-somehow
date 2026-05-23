@@ -51,11 +51,28 @@ Photorealistic survival game inventory item icon, isolated single object, center
 
 ## Current Fallback Items
 
-These are the actual built-in fallback item IDs currently present in `UCraftingComponent::GetDefaultItems`. If a `USurvivalItemCatalog` DataAsset adds more items later, generate additional icons using the base prompt and the same camera/light setup.
+These are the built-in fallback item IDs currently present in `USurvivalItemCatalog::GetDefaultItems`. If a `USurvivalItemCatalog` DataAsset adds more items later, generate additional icons using the base prompt and the same camera/light setup.
 
+- Wood: rough salvaged dry wood log, splintered cut end, weathered bark remnants.
+- Stick: straight dry branch or stick, bark wear, small cracks.
+- Stone: dense grey field stone, chipped edges, subtle dust.
+- PlantFiber: bundle of dry plant fibers, fibrous strands, olive-tan color.
+- Rope: rough hemp rope coil, frayed ends, worn fibers.
+- Cloth: torn dirty cloth scrap, canvas weave, frayed stitched edge.
+- RawMeat: raw red meat cut, realistic fat and moisture, no plate.
+- CookedMeat: grilled cooked meat, browned surface, no plate.
+- WaterBottle: clear plastic bottle with clean water, worn blue cap.
+- DirtyWater: plastic bottle with brown cloudy water, muddy residue.
+- Bandage: folded dirty survival bandage with small metal pin.
+- Alcohol: small amber medical alcohol bottle, no label text.
+- Hide: rough animal hide, fur side visible, irregular cut.
+- PrimitiveTool: rough tied stone-and-stick starter tool.
+- StoneAxe: primitive stone axe, wooden handle, fiber binding.
+- SharpenedStone: chipped sharp stone blade, matte grey.
+- Spear: wooden spear with sharpened or stone tip, fiber wrap.
+- Torch: wrapped wooden torch, soot-dark cloth head.
+- Campfire: compact campfire kit with stones, kindling and cord.
+- SimpleBackpack: worn canvas survival backpack.
+- PrimitiveClothing: rough hide-and-fiber primitive clothing bundle.
 - Axe: worn survival axe, dark wooden handle, scratched steel head, taped grip.
 - Pickaxe: heavy worn pickaxe, dark handle, chipped steel head, dust on metal.
-- Wood: rough salvaged dry wood piece, splintered edges, weathered bark remnants.
-- Stone: dense grey field stone, chipped sharp edges, subtle dust.
-- Stick: straight dry branch or stick, bark wear, small cracks.
-- StoneBlade: primitive chipped stone blade, sharp uneven edge, matte grey surface.

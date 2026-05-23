@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Items/SurvivalItemTypes.h"
 #include "SurvivalStatsComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnSurvivalStatsChanged);
@@ -29,6 +30,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
 	float Stamina = 100.0f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "-60.0", ClampMax = "60.0"))
+	float TemperatureCelsius = 37.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float Fatigue = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float Disease = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float Bleeding = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "100.0"))
+	float Poison = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing = OnRep_Stats, Category = "Survival", meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	float EncumbranceRatio = 0.0f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Survival", meta = (ClampMin = "0.0"))
 	float HungerDrainPerSecond = 0.015f;
 
@@ -55,6 +74,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Survival")
 	void ApplyHealthDelta(float Delta);
+
+	UFUNCTION(BlueprintCallable, Category = "Survival")
+	void ApplyItemEffects(const TArray<FSurvivalItemEffect>& Effects);
+
+	UFUNCTION(BlueprintCallable, Category = "Survival")
+	void SetEncumbranceRatio(float NewEncumbranceRatio);
 
 	UFUNCTION(BlueprintPure, Category = "Survival")
 	bool IsAlive() const { return Health > 0.0f; }

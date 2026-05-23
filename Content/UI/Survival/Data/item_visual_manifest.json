@@ -1,0 +1,39 @@
+{
+  "source_atlas": "/Users/ramsiado/.codex/generated_images/019e5276-a8fa-7c82-bbb1-86c8c67ec165/ig_088f6e87b5c66829016a110d9362908191b876ee41d1a62719.png",
+  "style": {
+    "lighting": "soft neutral studio light from upper left",
+    "camera": "consistent three-quarter object view",
+    "background": "transparent PNG after chroma-key removal",
+    "unreal_texture_group": "UI",
+    "recommended_compression": "UserInterface2D",
+    "shader": "opaque or masked lit material for world previews, unlit UI texture for inventory",
+    "inventory_size_px": 512,
+    "hotbar_scale": 0.72,
+    "crafting_surface_scale": 0.86
+  },
+  "items": [
+    {"id": "Wood", "file": "item_wood_log.png", "preview_mesh": "SM_WoodLog", "material": "MI_WoodWeathered"},
+    {"id": "Stick", "file": "item_stick.png", "preview_mesh": "SM_Stick", "material": "MI_BarkDry"},
+    {"id": "Stone", "file": "item_stone.png", "preview_mesh": "SM_FieldStone", "material": "MI_StoneGrey"},
+    {"id": "PlantFiber", "file": "item_plant_fiber.png", "preview_mesh": "SM_PlantFiberBundle", "material": "MI_DriedFiber"},
+    {"id": "Rope", "file": "item_rope.png", "preview_mesh": "SM_RopeCoil", "material": "MI_RopeHemp"},
+    {"id": "Cloth", "file": "item_cloth.png", "preview_mesh": "SM_ClothScrap", "material": "MI_ClothDirty"},
+    {"id": "RawMeat", "file": "item_raw_meat.png", "preview_mesh": "SM_RawMeat", "material": "MI_RawMeat"},
+    {"id": "CookedMeat", "file": "item_cooked_meat.png", "preview_mesh": "SM_CookedMeat", "material": "MI_CookedMeat"},
+    {"id": "WaterBottle", "file": "item_water_bottle.png", "preview_mesh": "SM_WaterBottleClean", "material": "MI_PlasticClearWater"},
+    {"id": "DirtyWater", "file": "item_dirty_water.png", "preview_mesh": "SM_WaterBottleDirty", "material": "MI_PlasticDirtyWater"},
+    {"id": "Bandage", "file": "item_bandage.png", "preview_mesh": "SM_BandageRoll", "material": "MI_BandageDirty"},
+    {"id": "Alcohol", "file": "item_alcohol.png", "preview_mesh": "SM_AlcoholBottle", "material": "MI_GlassAmber"},
+    {"id": "Hide", "file": "item_hide.png", "preview_mesh": "SM_AnimalHide", "material": "MI_FurHide"},
+    {"id": "StoneAxe", "file": "item_primitive_axe.png", "preview_mesh": "SM_StoneAxe", "material": "MI_StoneTool"},
+    {"id": "Spear", "file": "item_spear.png", "preview_mesh": "SM_WoodSpear", "material": "MI_WoodSharp"},
+    {"id": "Torch", "file": "item_torch.png", "preview_mesh": "SM_TorchWrapped", "material": "MI_TorchUnlit"},
+    {"id": "Campfire", "file": "item_campfire.png", "preview_mesh": "SM_CampfireKit", "material": "MI_CampfireKit"},
+    {"id": "SimpleBackpack", "file": "item_simple_backpack.png", "preview_mesh": "SM_SimpleBackpack", "material": "MI_CanvasWorn"}
+  ],
+  "replacement_notes": [
+    "Replace preview_mesh names with imported StaticMesh assets under /Game/Survival/Items/Meshes.",
+    "Keep icon camera, light direction, subject padding and alpha background consistent when replacing PNGs.",
+    "For crafting-surface 3D previews, use the same ItemId-to-PreviewMesh mapping in FItemDef."
+  ]
+}

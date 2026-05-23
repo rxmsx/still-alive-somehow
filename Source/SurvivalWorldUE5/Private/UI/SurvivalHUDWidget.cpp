@@ -11,6 +11,7 @@
 #include "Engine/GameInstance.h"
 #include "InputCoreTypes.h"
 #include "Rendering/DrawElements.h"
+#include "Engine/Texture2D.h"
 #include "Styling/CoreStyle.h"
 
 namespace
@@ -237,16 +238,68 @@ namespace
 		{
 		case ESurvivalItemCategory::Resource:
 			return TEXT("Ressource");
-		case ESurvivalItemCategory::Tool:
-			return TEXT("Werkzeug");
 		case ESurvivalItemCategory::Food:
 			return TEXT("Nahrung");
+		case ESurvivalItemCategory::Drink:
+			return TEXT("Getraenk");
+		case ESurvivalItemCategory::Medicine:
+			return TEXT("Medizin");
+		case ESurvivalItemCategory::Tool:
+			return TEXT("Werkzeug");
+		case ESurvivalItemCategory::Weapon:
+			return TEXT("Waffe");
+		case ESurvivalItemCategory::Ammunition:
+			return TEXT("Munition");
+		case ESurvivalItemCategory::Armor:
+			return TEXT("Kleidung");
 		case ESurvivalItemCategory::Building:
 			return TEXT("Bauen");
 		case ESurvivalItemCategory::Ore:
 			return TEXT("Erz");
+		case ESurvivalItemCategory::Quest:
+			return TEXT("Quest");
+		case ESurvivalItemCategory::Special:
+			return TEXT("Spezial");
 		default:
 			return TEXT("Sonstiges");
+		}
+	}
+
+	FString RarityLabel(ESurvivalItemRarity Rarity)
+	{
+		switch (Rarity)
+		{
+		case ESurvivalItemRarity::Uncommon:
+			return TEXT("Ungewoehnlich");
+		case ESurvivalItemRarity::Rare:
+			return TEXT("Selten");
+		case ESurvivalItemRarity::Epic:
+			return TEXT("Episch");
+		case ESurvivalItemRarity::Legendary:
+			return TEXT("Legendaer");
+		case ESurvivalItemRarity::Quest:
+			return TEXT("Quest");
+		default:
+			return TEXT("Gewoehnlich");
+		}
+	}
+
+	FString StationLabel(ECraftingStationType Station)
+	{
+		switch (Station)
+		{
+		case ECraftingStationType::Workbench:
+			return TEXT("Werkbank");
+		case ECraftingStationType::Campfire:
+			return TEXT("Lagerfeuer");
+		case ECraftingStationType::Forge:
+			return TEXT("Schmiede");
+		case ECraftingStationType::CookingStation:
+			return TEXT("Kochstelle");
+		case ECraftingStationType::MedicalTable:
+			return TEXT("Medizin-Tisch");
+		default:
+			return TEXT("Handwerk");
 		}
 	}
 
@@ -256,17 +309,45 @@ namespace
 		{
 			return FLinearColor(0.46f, 0.32f, 0.18f, 1.0f);
 		}
-		if (ItemId == TEXT("Stone") || ItemId == TEXT("StoneBlade"))
+		if (ItemId == TEXT("Stone") || ItemId == TEXT("SharpenedStone") || ItemId == TEXT("PrimitiveTool"))
 		{
 			return FLinearColor(0.55f, 0.56f, 0.52f, 1.0f);
+		}
+		if (ItemId == TEXT("PlantFiber") || ItemId == TEXT("Rope"))
+		{
+			return FLinearColor(0.42f, 0.48f, 0.26f, 1.0f);
+		}
+		if (ItemId == TEXT("Cloth") || ItemId == TEXT("Bandage"))
+		{
+			return FLinearColor(0.66f, 0.62f, 0.50f, 1.0f);
+		}
+		if (ItemId == TEXT("WaterBottle") || ItemId == TEXT("DirtyWater"))
+		{
+			return FLinearColor(0.28f, 0.50f, 0.58f, 1.0f);
+		}
+		if (ItemId == TEXT("RawMeat") || ItemId == TEXT("CookedMeat"))
+		{
+			return FLinearColor(0.55f, 0.24f, 0.18f, 1.0f);
 		}
 		if (Category == ESurvivalItemCategory::Tool)
 		{
 			return FLinearColor(0.62f, 0.58f, 0.48f, 1.0f);
 		}
+		if (Category == ESurvivalItemCategory::Weapon)
+		{
+			return FLinearColor(0.52f, 0.44f, 0.32f, 1.0f);
+		}
+		if (Category == ESurvivalItemCategory::Medicine)
+		{
+			return FLinearColor(0.58f, 0.52f, 0.44f, 1.0f);
+		}
 		if (Category == ESurvivalItemCategory::Food)
 		{
 			return FLinearColor(0.48f, 0.36f, 0.20f, 1.0f);
+		}
+		if (Category == ESurvivalItemCategory::Armor)
+		{
+			return FLinearColor(0.40f, 0.36f, 0.28f, 1.0f);
 		}
 		if (Category == ESurvivalItemCategory::Ore)
 		{
@@ -351,10 +432,14 @@ namespace
 			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-18.0f, 21.0f) * Scale, Center + FVector2D(12.0f, -18.0f) * Scale, Body, 5.0f * Scale);
 			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-18.0f, -18.0f) * Scale, Center + FVector2D(30.0f, -10.0f) * Scale, Metal, 5.0f * Scale);
 		}
-		else if (ItemId == TEXT("StoneBlade"))
+		else if (ItemId == TEXT("SharpenedStone") || ItemId == TEXT("PrimitiveTool"))
 		{
 			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-24.0f, 14.0f) * Scale, Center + FVector2D(24.0f, -13.0f) * Scale, Metal, 7.0f * Scale);
 			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-26.0f, 16.0f) * Scale, Center + FVector2D(-8.0f, 6.0f) * Scale, Dark, 5.0f * Scale);
+			if (ItemId == TEXT("PrimitiveTool"))
+			{
+				DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-18.0f, -10.0f) * Scale, Center + FVector2D(18.0f, 12.0f) * Scale, FLinearColor(0.45f, 0.28f, 0.15f, 0.94f), 4.0f * Scale);
+			}
 		}
 		else if (ItemId == TEXT("Stick") || ItemId == TEXT("Wood"))
 		{
@@ -367,6 +452,66 @@ namespace
 			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-9.0f, 3.0f) * Scale, 18.0f * Scale, Body);
 			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(11.0f, -4.0f) * Scale, 15.0f * Scale, Dark);
 			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-18.0f, -2.0f) * Scale, Center + FVector2D(-4.0f, -12.0f) * Scale, FLinearColor(0.86f, 0.84f, 0.72f, 0.40f), 1.0f * Scale);
+		}
+		else if (ItemId == TEXT("PlantFiber") || ItemId == TEXT("Rope"))
+		{
+			for (int32 Strand = 0; Strand < 4; ++Strand)
+			{
+				const float Offset = static_cast<float>(Strand - 2) * 4.0f;
+				DrawLine(Geometry, OutDrawElements, LayerId + 1 + Strand, Center + FVector2D(-26.0f, Offset) * Scale, Center + FVector2D(26.0f, -Offset * 0.4f) * Scale, Body, (ItemId == TEXT("Rope") ? 3.0f : 1.6f) * Scale);
+			}
+		}
+		else if (ItemId == TEXT("Cloth") || ItemId == TEXT("Bandage"))
+		{
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-24.0f, -14.0f) * Scale, FVector2D(48.0f, 30.0f) * Scale, Body);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-22.0f, -4.0f) * Scale, Center + FVector2D(22.0f, -8.0f) * Scale, Dark, 1.0f * Scale);
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-20.0f, 7.0f) * Scale, Center + FVector2D(18.0f, 4.0f) * Scale, FLinearColor(0.88f, 0.84f, 0.72f, 0.35f), 1.0f * Scale);
+			if (ItemId == TEXT("Bandage"))
+			{
+				DrawBox(Geometry, OutDrawElements, LayerId + 4, Center + FVector2D(-3.0f, -12.0f) * Scale, FVector2D(6.0f, 26.0f) * Scale, FLinearColor(0.70f, 0.16f, 0.14f, 0.72f));
+				DrawBox(Geometry, OutDrawElements, LayerId + 4, Center + FVector2D(-14.0f, -1.0f) * Scale, FVector2D(28.0f, 6.0f) * Scale, FLinearColor(0.70f, 0.16f, 0.14f, 0.72f));
+			}
+		}
+		else if (ItemId == TEXT("WaterBottle") || ItemId == TEXT("DirtyWater") || ItemId == TEXT("Alcohol"))
+		{
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-12.0f, -24.0f) * Scale, FVector2D(24.0f, 46.0f) * Scale, FLinearColor(0.18f, 0.22f, 0.24f, 0.86f));
+			DrawBox(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-8.0f, -18.0f) * Scale, FVector2D(16.0f, 34.0f) * Scale, Body);
+			DrawBox(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-7.0f, -30.0f) * Scale, FVector2D(14.0f, 8.0f) * Scale, Dark);
+		}
+		else if (ItemId == TEXT("RawMeat") || ItemId == TEXT("CookedMeat"))
+		{
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-8.0f, 0.0f) * Scale, 18.0f * Scale, Body);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(12.0f, -3.0f) * Scale, 14.0f * Scale, Dark);
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-18.0f, -6.0f) * Scale, Center + FVector2D(14.0f, -12.0f) * Scale, FLinearColor(0.88f, 0.66f, 0.48f, 0.30f), 1.0f * Scale);
+		}
+		else if (ItemId == TEXT("Spear"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-28.0f, 20.0f) * Scale, Center + FVector2D(28.0f, -22.0f) * Scale, Body, 4.0f * Scale);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(20.0f, -16.0f) * Scale, Center + FVector2D(31.0f, -27.0f) * Scale, Metal, 4.0f * Scale);
+		}
+		else if (ItemId == TEXT("StoneAxe"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-20.0f, 20.0f) * Scale, Center + FVector2D(16.0f, -18.0f) * Scale, FLinearColor(0.42f, 0.26f, 0.14f, 0.96f), 5.0f * Scale);
+			DrawBox(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(6.0f, -24.0f) * Scale, FVector2D(28.0f, 18.0f) * Scale, Metal);
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(1.0f, -9.0f) * Scale, Center + FVector2D(22.0f, -5.0f) * Scale, FLinearColor(0.44f, 0.52f, 0.30f, 0.88f), 2.0f * Scale);
+		}
+		else if (ItemId == TEXT("Torch"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-18.0f, 22.0f) * Scale, Center + FVector2D(12.0f, -18.0f) * Scale, Body, 5.0f * Scale);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(16.0f, -22.0f) * Scale, 11.0f * Scale, FLinearColor(0.86f, 0.45f, 0.16f, 0.90f));
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(18.0f, -27.0f) * Scale, 6.0f * Scale, FLinearColor(0.95f, 0.78f, 0.34f, 0.80f));
+		}
+		else if (ItemId == TEXT("Campfire"))
+		{
+			DrawLine(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-26.0f, 16.0f) * Scale, Center + FVector2D(22.0f, 2.0f) * Scale, Body, 5.0f * Scale);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-18.0f, 0.0f) * Scale, Center + FVector2D(26.0f, 18.0f) * Scale, Dark, 5.0f * Scale);
+			DrawFilledCircle(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(0.0f, -6.0f) * Scale, 13.0f * Scale, FLinearColor(0.84f, 0.34f, 0.16f, 0.80f));
+		}
+		else if (ItemId == TEXT("SimpleBackpack") || ItemId == TEXT("PrimitiveClothing") || ItemId == TEXT("Hide"))
+		{
+			DrawBox(Geometry, OutDrawElements, LayerId + 1, Center + FVector2D(-22.0f, -20.0f) * Scale, FVector2D(44.0f, 42.0f) * Scale, Body);
+			DrawLine(Geometry, OutDrawElements, LayerId + 2, Center + FVector2D(-16.0f, -14.0f) * Scale, Center + FVector2D(16.0f, -11.0f) * Scale, Dark, 2.0f * Scale);
+			DrawLine(Geometry, OutDrawElements, LayerId + 3, Center + FVector2D(-20.0f, 14.0f) * Scale, Center + FVector2D(18.0f, 16.0f) * Scale, FLinearColor(0.86f, 0.74f, 0.48f, 0.25f), 1.0f * Scale);
 		}
 		else if (Category == ESurvivalItemCategory::Tool)
 		{
@@ -406,10 +551,13 @@ namespace
 		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
 		const FSlateRect& Bounds,
 		const FInventoryStack& Stack,
-		const UCraftingComponent* Crafting)
+		const UCraftingComponent* Crafting,
+		bool bCraftingInput = false)
 	{
 		USurvivalHUDWidget::FInventoryItemHitBox HitBox;
 		HitBox.ItemId = Stack.ItemId;
+		HitBox.SlotIndex = Stack.SlotIndex;
+		HitBox.bCraftingInput = bCraftingInput;
 		HitBox.DisplayName = ItemDisplayName(Crafting, Stack.ItemId);
 		HitBox.Category = CategoryLabel(ItemCategory(Crafting, Stack.ItemId));
 		HitBox.Description = ItemDescription(Crafting, Stack.ItemId);
@@ -418,25 +566,70 @@ namespace
 		ItemHitBoxes.Add(HitBox);
 	}
 
+	void AddSlotHitBox(
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
+		const FSlateRect& Bounds,
+		int32 SlotIndex,
+		bool bCraftingInput = false,
+		bool bHotbarSlot = false,
+		int32 HotbarIndex = INDEX_NONE)
+	{
+		USurvivalHUDWidget::FSlotHitBox HitBox;
+		HitBox.SlotIndex = SlotIndex;
+		HitBox.bCraftingInput = bCraftingInput;
+		HitBox.bHotbarSlot = bHotbarSlot;
+		HitBox.HotbarIndex = HotbarIndex;
+		HitBox.Bounds = Bounds;
+		SlotHitBoxes.Add(HitBox);
+	}
+
 	void DrawInventoryItemInSlot(
 		const FGeometry& Geometry,
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
 		const FVector2D& SlotPosition,
 		const FVector2D& SlotSize,
 		const FInventoryStack& Stack,
 		const UCraftingComponent* Crafting,
 		FName HoveredItemId,
 		FName SelectedItemId,
-		bool bEquipped = false)
+		bool bEquipped = false,
+		bool bCraftingInput = false,
+		bool bHotbarSlot = false,
+		int32 HotbarIndex = INDEX_NONE)
 	{
 		const ESurvivalItemCategory Category = ItemCategory(Crafting, Stack.ItemId);
 		const FLinearColor Accent = ItemAccentColor(Stack.ItemId, Category);
 		const bool bHovered = Stack.ItemId == HoveredItemId;
 		const bool bSelected = Stack.ItemId == SelectedItemId;
 		DrawSlotFrame(Geometry, OutDrawElements, LayerId, SlotPosition, SlotSize, Accent, bHovered, bSelected, bEquipped);
-		DrawItemGlyph(Geometry, OutDrawElements, LayerId + 6, SlotPosition + SlotSize * 0.5f + FVector2D(0.0f, -2.0f), SlotSize.X / 76.0f, Stack.ItemId, Category, bHovered || bSelected);
+
+		FItemDef ItemDef;
+		UTexture2D* ItemTexture = nullptr;
+		if (Crafting && Crafting->GetItemDefinition(Stack.ItemId, ItemDef))
+		{
+			ItemTexture = ItemDef.InventoryImage ? ItemDef.InventoryImage.Get() : ItemDef.Icon.Get();
+		}
+
+		if (ItemTexture)
+		{
+			FSlateBrush IconBrush;
+			IconBrush.SetResourceObject(ItemTexture);
+			IconBrush.ImageSize = FVector2D(SlotSize.X - 14.0f, SlotSize.Y - 14.0f);
+			FSlateDrawElement::MakeBox(
+				OutDrawElements,
+				LayerId + 6,
+				Geometry.ToPaintGeometry(FVector2f(SlotSize - FVector2D(14.0f, 14.0f)), FSlateLayoutTransform(FVector2f(SlotPosition + FVector2D(7.0f, 7.0f)))),
+				&IconBrush,
+				ESlateDrawEffect::None,
+				bHovered || bSelected ? FLinearColor(1.08f, 1.05f, 0.94f, 1.0f) : FLinearColor::White);
+		}
+		else
+		{
+			DrawItemGlyph(Geometry, OutDrawElements, LayerId + 6, SlotPosition + SlotSize * 0.5f + FVector2D(0.0f, -2.0f), SlotSize.X / 76.0f, Stack.ItemId, Category, bHovered || bSelected);
+		}
 
 		if (Stack.Count > 1)
 		{
@@ -446,7 +639,9 @@ namespace
 			DrawText(Geometry, OutDrawElements, LayerId + 14, FString::Printf(TEXT("%d"), Stack.Count), CountTagPosition + FVector2D(6.0f, 1.0f), FLinearColor(0.92f, 0.88f, 0.74f, 1.0f), 10, true, 26.0f);
 		}
 
-		AddInventoryHitBox(ItemHitBoxes, FSlateRect(SlotPosition.X, SlotPosition.Y, SlotPosition.X + SlotSize.X, SlotPosition.Y + SlotSize.Y), Stack, Crafting);
+		const FSlateRect Bounds(SlotPosition.X, SlotPosition.Y, SlotPosition.X + SlotSize.X, SlotPosition.Y + SlotSize.Y);
+		AddSlotHitBox(SlotHitBoxes, Bounds, Stack.SlotIndex, bCraftingInput, bHotbarSlot, HotbarIndex);
+		AddInventoryHitBox(ItemHitBoxes, Bounds, Stack, Crafting, bCraftingInput);
 	}
 
 	void DrawMapBackground(
@@ -612,7 +807,7 @@ namespace
 
 		const UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
 		const UCraftingComponent* Crafting = SurvivalCharacter->CraftingComponent;
-		const TArray<FInventoryStack> Stacks = Inventory->GetSortedStacks();
+		const TArray<FInventoryStack> Stacks = Inventory->GetHotbarStacks();
 		const int32 SlotCount = 6;
 		const FVector2D SlotSize(56.0f, 56.0f);
 		const float Gap = 8.0f;
@@ -622,9 +817,10 @@ namespace
 		for (int32 Index = 0; Index < SlotCount; ++Index)
 		{
 			const FVector2D Position = Start + FVector2D(Index * (SlotSize.X + Gap), 0.0f);
-			const bool bHasItem = Stacks.IsValidIndex(Index);
+			const bool bHasItem = Stacks.IsValidIndex(Index) && !Stacks[Index].IsEmpty();
 			const FLinearColor Accent = bHasItem ? ItemAccentColor(Stacks[Index].ItemId, ItemCategory(Crafting, Stacks[Index].ItemId)) : FLinearColor(0.26f, 0.24f, 0.20f, 1.0f);
-			DrawSlotFrame(Geometry, OutDrawElements, LayerId + Index * 12, Position, SlotSize, Accent, false, Index == 0 && bHasItem, Index == 0 && bHasItem, !bHasItem);
+			const bool bEquipped = bHasItem && Stacks[Index].SlotIndex == Inventory->GetEquippedSlotIndex();
+			DrawSlotFrame(Geometry, OutDrawElements, LayerId + Index * 12, Position, SlotSize, Accent, false, bEquipped, bEquipped, !bHasItem);
 			DrawText(Geometry, OutDrawElements, LayerId + Index * 12 + 6, FString::FromInt(Index + 1), Position + FVector2D(5.0f, 3.0f), FLinearColor(0.72f, 0.70f, 0.62f, 0.86f), 10, true, 18.0f);
 			if (bHasItem)
 			{
@@ -728,13 +924,14 @@ namespace
 		const UCraftingComponent* Crafting,
 		bool bSelected)
 	{
-		const bool bCanCraft = Crafting && Crafting->CanCraft(Recipe.RecipeId);
-		const FLinearColor Accent = bCanCraft ? FLinearColor(0.38f, 0.60f, 0.38f, 1.0f) : FLinearColor(0.58f, 0.46f, 0.28f, 1.0f);
+		const bool bKnown = Crafting && Crafting->IsRecipeKnown(Recipe.RecipeId);
+		const bool bCanCraft = bKnown && Crafting && Crafting->CanCraft(Recipe.RecipeId);
+		const FLinearColor Accent = !bKnown ? FLinearColor(0.30f, 0.30f, 0.28f, 1.0f) : bCanCraft ? FLinearColor(0.38f, 0.60f, 0.38f, 1.0f) : FLinearColor(0.58f, 0.46f, 0.28f, 1.0f);
 		DrawBox(Geometry, OutDrawElements, LayerId, Position + FVector2D(2.0f, 3.0f), Size, FLinearColor(0.0f, 0.0f, 0.0f, 0.20f));
 		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position, Size, bSelected ? FLinearColor(0.105f, 0.102f, 0.086f, 0.96f) : FLinearColor(0.040f, 0.042f, 0.040f, 0.86f));
 		DrawBox(Geometry, OutDrawElements, LayerId + 2, Position, FVector2D(4.0f, Size.Y), WithAlpha(Accent, bSelected ? 0.90f : 0.55f));
-		DrawText(Geometry, OutDrawElements, LayerId + 3, Recipe.DisplayName.IsEmpty() ? Recipe.RecipeId.ToString() : Recipe.DisplayName.ToString(), Position + FVector2D(14.0f, 9.0f), FLinearColor(0.92f, 0.90f, 0.80f, 1.0f), 12, true, Size.X - 24.0f);
-		DrawText(Geometry, OutDrawElements, LayerId + 3, bCanCraft ? TEXT("bereit") : TEXT("Material fehlt"), Position + FVector2D(14.0f, 30.0f), bCanCraft ? FLinearColor(0.58f, 0.76f, 0.52f, 0.90f) : FLinearColor(0.76f, 0.62f, 0.40f, 0.82f), 10, false, Size.X - 24.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 3, bKnown ? (Recipe.DisplayName.IsEmpty() ? Recipe.RecipeId.ToString() : Recipe.DisplayName.ToString()) : TEXT("Unbekanntes Rezept"), Position + FVector2D(14.0f, 9.0f), bKnown ? FLinearColor(0.92f, 0.90f, 0.80f, 1.0f) : FLinearColor(0.54f, 0.53f, 0.47f, 0.86f), 12, true, Size.X - 24.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 3, !bKnown ? TEXT("noch nicht gelernt") : bCanCraft ? TEXT("bereit") : TEXT("nicht bereit"), Position + FVector2D(14.0f, 30.0f), bCanCraft ? FLinearColor(0.58f, 0.76f, 0.52f, 0.90f) : FLinearColor(0.76f, 0.62f, 0.40f, 0.82f), 10, false, Size.X - 24.0f);
 
 		USurvivalHUDWidget::FRecipeHitBox HitBox;
 		HitBox.RecipeId = Recipe.RecipeId;
@@ -743,18 +940,74 @@ namespace
 		RecipeHitBoxes.Add(HitBox);
 	}
 
+	void DrawCraftingSurface(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
+		const FVector2D& Position,
+		const FVector2D& Size,
+		const UCraftingComponent* Crafting,
+		FName HoveredItemId,
+		FName SelectedItemId)
+	{
+		DrawBox(Geometry, OutDrawElements, LayerId, Position, Size, FLinearColor(0.045f, 0.040f, 0.032f, 0.92f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 1, Position + FVector2D(8.0f, 8.0f), Size - FVector2D(16.0f, 16.0f), FLinearColor(0.078f, 0.066f, 0.045f, 0.80f));
+		DrawLine(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(16.0f, Size.Y * 0.38f), Position + FVector2D(Size.X - 18.0f, Size.Y * 0.34f), FLinearColor(0.20f, 0.15f, 0.09f, 0.42f), 2.0f);
+		DrawLine(Geometry, OutDrawElements, LayerId + 2, Position + FVector2D(18.0f, Size.Y * 0.70f), Position + FVector2D(Size.X - 24.0f, Size.Y * 0.64f), FLinearColor(0.22f, 0.17f, 0.10f, 0.36f), 1.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 3, TEXT("Werkflaeche"), Position + FVector2D(14.0f, 8.0f), FLinearColor(0.72f, 0.68f, 0.56f, 0.84f), 11, true, Size.X - 28.0f);
+
+		if (!Crafting)
+		{
+			return;
+		}
+
+		const TArray<FInventoryStack> InputSlots = Crafting->GetCraftingInputSlots();
+		const FVector2D SlotSize(54.0f, 54.0f);
+		const float Gap = 8.0f;
+		const int32 Columns = FMath::Max(1, FMath::FloorToInt((Size.X - 28.0f + Gap) / (SlotSize.X + Gap)));
+		const FVector2D Start = Position + FVector2D(14.0f, 34.0f);
+		for (int32 SlotIndex = 0; SlotIndex < InputSlots.Num(); ++SlotIndex)
+		{
+			const int32 Column = SlotIndex % Columns;
+			const int32 Row = SlotIndex / Columns;
+			const FVector2D SlotPosition = Start + FVector2D(Column * (SlotSize.X + Gap), Row * (SlotSize.Y + Gap));
+			if (SlotPosition.Y + SlotSize.Y > Position.Y + Size.Y - 10.0f)
+			{
+				break;
+			}
+
+			const FSlateRect Bounds(SlotPosition.X, SlotPosition.Y, SlotPosition.X + SlotSize.X, SlotPosition.Y + SlotSize.Y);
+			if (InputSlots[SlotIndex].IsEmpty())
+			{
+				DrawSlotFrame(Geometry, OutDrawElements, LayerId + 10 + SlotIndex * 14, SlotPosition, SlotSize, FLinearColor(0.36f, 0.30f, 0.20f, 1.0f), false, false, false, true);
+				AddSlotHitBox(SlotHitBoxes, Bounds, SlotIndex, true);
+			}
+			else
+			{
+				DrawInventoryItemInSlot(Geometry, OutDrawElements, LayerId + 10 + SlotIndex * 14, ItemHitBoxes, SlotHitBoxes, SlotPosition, SlotSize, InputSlots[SlotIndex], Crafting, HoveredItemId, SelectedItemId, false, true);
+			}
+		}
+	}
+
 	void DrawCraftingDetails(
 		const FGeometry& Geometry,
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FRecipeHitBox>& RecipeHitBoxes,
+		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
 		const FVector2D& Position,
 		const FVector2D& Size,
 		const FCraftingRecipe& Recipe,
 		const UCraftingComponent* Crafting,
-		const UInventoryComponent* Inventory)
+		const UInventoryComponent* Inventory,
+		FName HoveredItemId,
+		FName SelectedItemId)
 	{
-		const bool bCanCraft = Crafting && Crafting->CanCraft(Recipe.RecipeId);
+		const bool bKnown = Crafting && Crafting->IsRecipeKnown(Recipe.RecipeId);
+		const bool bCanCraft = bKnown && Crafting && Crafting->CanCraft(Recipe.RecipeId);
 		const FString OutputName = ItemDisplayName(Crafting, Recipe.OutputItemId);
 		const ESurvivalItemCategory OutputCategory = ItemCategory(Crafting, Recipe.OutputItemId);
 		const FLinearColor Accent = bCanCraft ? FLinearColor(0.40f, 0.68f, 0.42f, 1.0f) : FLinearColor(0.64f, 0.48f, 0.28f, 1.0f);
@@ -768,6 +1021,7 @@ namespace
 		DrawItemGlyph(Geometry, OutDrawElements, LayerId + 18, ResultSlot + FVector2D(39.0f, 38.0f), 0.90f, Recipe.OutputItemId, OutputCategory, true);
 		DrawText(Geometry, OutDrawElements, LayerId + 22, FString::Printf(TEXT("%s x%d"), *OutputName, Recipe.OutputCount), Position + FVector2D(116.0f, 103.0f), FLinearColor(0.88f, 0.84f, 0.70f, 1.0f), 14, true, Size.X - 138.0f);
 		DrawText(Geometry, OutDrawElements, LayerId + 22, CategoryLabel(OutputCategory), Position + FVector2D(116.0f, 128.0f), FLinearColor(0.62f, 0.60f, 0.52f, 0.86f), 11, false, Size.X - 138.0f);
+		DrawText(Geometry, OutDrawElements, LayerId + 22, FString::Printf(TEXT("%.0fs   %s"), Recipe.CraftTimeSeconds, *StationLabel(Recipe.RequiredStation)), Position + FVector2D(116.0f, 149.0f), FLinearColor(0.62f, 0.60f, 0.52f, 0.86f), 10, false, Size.X - 138.0f);
 
 		DrawText(Geometry, OutDrawElements, LayerId + 24, TEXT("Zutaten"), Position + FVector2D(24.0f, 192.0f), FLinearColor(0.78f, 0.74f, 0.62f, 0.92f), 12, true, Size.X - 48.0f);
 		for (int32 Index = 0; Index < Recipe.Ingredients.Num(); ++Index)
@@ -783,8 +1037,33 @@ namespace
 			DrawText(Geometry, OutDrawElements, LayerId + 27 + Index * 4, FString::Printf(TEXT("%d / %d"), Have, Ingredient.Count), RowPosition + FVector2D(RowSize.X - 56.0f, 5.0f), bHasEnough ? FLinearColor(0.74f, 0.86f, 0.68f, 0.94f) : FLinearColor(0.92f, 0.58f, 0.42f, 0.94f), 11, true, 52.0f);
 		}
 
+		const FVector2D SurfacePosition(Position.X + 24.0f, Position.Y + Size.Y - 184.0f);
+		const FVector2D SurfaceSize(Size.X - 196.0f, 136.0f);
+		DrawCraftingSurface(Geometry, OutDrawElements, LayerId + 48, ItemHitBoxes, SlotHitBoxes, SurfacePosition, SurfaceSize, Crafting, HoveredItemId, SelectedItemId);
+
+		if (Crafting && Crafting->IsCrafting())
+		{
+			const FVector2D ProgressPosition(Position.X + Size.X - 172.0f, Position.Y + Size.Y - 88.0f);
+			const FVector2D ProgressSize(148.0f, 9.0f);
+			DrawBox(Geometry, OutDrawElements, LayerId + 58, ProgressPosition, ProgressSize, FLinearColor(0.010f, 0.012f, 0.012f, 0.88f));
+			DrawBox(Geometry, OutDrawElements, LayerId + 59, ProgressPosition, FVector2D(ProgressSize.X * Crafting->GetCraftingProgress(), ProgressSize.Y), FLinearColor(0.62f, 0.54f, 0.34f, 0.86f));
+		}
+
 		const FVector2D ButtonSize(148.0f, 38.0f);
 		const FVector2D ButtonPosition(Position.X + Size.X - ButtonSize.X - 24.0f, Position.Y + Size.Y - ButtonSize.Y - 24.0f);
+		const FVector2D FillButtonPosition(ButtonPosition - FVector2D(0.0f, 46.0f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 56, FillButtonPosition + FVector2D(3.0f, 4.0f), ButtonSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.22f));
+		DrawBox(Geometry, OutDrawElements, LayerId + 57, FillButtonPosition, ButtonSize, FLinearColor(0.060f, 0.058f, 0.050f, 0.90f));
+		DrawText(Geometry, OutDrawElements, LayerId + 58, TEXT("Material legen"), FillButtonPosition + FVector2D(22.0f, 10.0f), FLinearColor(0.78f, 0.74f, 0.62f, 0.90f), 12, true, ButtonSize.X - 32.0f);
+		if (bKnown)
+		{
+			USurvivalHUDWidget::FRecipeHitBox FillHitBox;
+			FillHitBox.RecipeId = Recipe.RecipeId;
+			FillHitBox.bAutoFillButton = true;
+			FillHitBox.Bounds = FSlateRect(FillButtonPosition.X, FillButtonPosition.Y, FillButtonPosition.X + ButtonSize.X, FillButtonPosition.Y + ButtonSize.Y);
+			RecipeHitBoxes.Add(FillHitBox);
+		}
+
 		DrawBox(Geometry, OutDrawElements, LayerId + 60, ButtonPosition + FVector2D(3.0f, 4.0f), ButtonSize, FLinearColor(0.0f, 0.0f, 0.0f, 0.28f));
 		DrawBox(Geometry, OutDrawElements, LayerId + 61, ButtonPosition, ButtonSize, bCanCraft ? FLinearColor(0.18f, 0.30f, 0.20f, 0.96f) : FLinearColor(0.050f, 0.048f, 0.044f, 0.88f));
 		DrawBox(Geometry, OutDrawElements, LayerId + 62, ButtonPosition, FVector2D(ButtonSize.X, 2.0f), WithAlpha(Accent, bCanCraft ? 0.72f : 0.26f));
@@ -805,6 +1084,7 @@ namespace
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
 		const FVector2D& Position,
 		const FVector2D& Size,
 		const FString& Title,
@@ -812,7 +1092,9 @@ namespace
 		const UCraftingComponent* Crafting,
 		FName HoveredItemId,
 		FName SelectedItemId,
-		bool bTreatAsEquipped)
+		bool bTreatAsEquipped,
+		bool bTreatAsHotbar = false,
+		int32 EquippedSlotIndex = INDEX_NONE)
 	{
 		DrawPanel(Geometry, OutDrawElements, LayerId, Position, Size);
 		DrawText(Geometry, OutDrawElements, LayerId + 8, Title, Position + FVector2D(18.0f, 14.0f), FLinearColor(0.82f, 0.78f, 0.66f, 0.92f), 13, true, Size.X - 36.0f);
@@ -830,13 +1112,20 @@ namespace
 			const int32 Column = SlotIndex % Columns;
 			const int32 Row = SlotIndex / Columns;
 			const FVector2D SlotPosition = GridStart + FVector2D(Column * (SlotSize.X + Gap), Row * (SlotSize.Y + Gap));
-			if (Stacks.IsValidIndex(SlotIndex))
+			const FSlateRect SlotBounds(SlotPosition.X, SlotPosition.Y, SlotPosition.X + SlotSize.X, SlotPosition.Y + SlotSize.Y);
+			if (Stacks.IsValidIndex(SlotIndex) && !Stacks[SlotIndex].IsEmpty())
 			{
-				DrawInventoryItemInSlot(Geometry, OutDrawElements, LayerId + 12 + SlotIndex * 18, ItemHitBoxes, SlotPosition, SlotSize, Stacks[SlotIndex], Crafting, HoveredItemId, SelectedItemId, bTreatAsEquipped);
+				const bool bEquipped = bTreatAsEquipped && Stacks[SlotIndex].SlotIndex == EquippedSlotIndex;
+				DrawInventoryItemInSlot(Geometry, OutDrawElements, LayerId + 12 + SlotIndex * 18, ItemHitBoxes, SlotHitBoxes, SlotPosition, SlotSize, Stacks[SlotIndex], Crafting, HoveredItemId, SelectedItemId, bEquipped, false, bTreatAsHotbar, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
 			}
 			else
 			{
 				DrawSlotFrame(Geometry, OutDrawElements, LayerId + 12 + SlotIndex * 18, SlotPosition, SlotSize, FLinearColor(0.26f, 0.24f, 0.20f, 1.0f), false, false, false, true);
+				if (Stacks.IsValidIndex(SlotIndex) || bTreatAsHotbar)
+				{
+					const int32 HitSlotIndex = Stacks.IsValidIndex(SlotIndex) ? Stacks[SlotIndex].SlotIndex : INDEX_NONE;
+					AddSlotHitBox(SlotHitBoxes, SlotBounds, HitSlotIndex, false, bTreatAsHotbar, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
+				}
 			}
 		}
 	}
@@ -846,6 +1135,7 @@ namespace
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId,
 		const TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		const UCraftingComponent* Crafting,
 		FName TooltipItemId,
 		const FVector2D& ViewSize)
 	{
@@ -880,8 +1170,70 @@ namespace
 			{
 				DrawText(Geometry, OutDrawElements, LayerId + 8, HitBox.Description, Position + FVector2D(16.0f, 70.0f), FLinearColor(0.82f, 0.80f, 0.70f, 0.90f), 11, false, Size.X - 32.0f);
 			}
-			DrawText(Geometry, OutDrawElements, LayerId + 8, TEXT("Gewicht/Zustand: keine Itemdaten"), Position + FVector2D(16.0f, Size.Y - 30.0f), FLinearColor(0.50f, 0.49f, 0.43f, 0.82f), 10, false, Size.X - 32.0f);
+			FString MetaText = TEXT("Gewicht/Zustand: keine Itemdaten");
+			FItemDef ItemDef;
+			if (Crafting && Crafting->GetItemDefinition(HitBox.ItemId, ItemDef))
+			{
+				MetaText = FString::Printf(TEXT("%s   %.2f kg   Stack %d"), *RarityLabel(ItemDef.Rarity), ItemDef.WeightKg, ItemDef.GetEffectiveMaxStack());
+				if (ItemDef.bHasDurability)
+				{
+					MetaText += FString::Printf(TEXT("   Haltbarkeit %.0f"), ItemDef.MaxDurability);
+				}
+			}
+			DrawText(Geometry, OutDrawElements, LayerId + 8, MetaText, Position + FVector2D(16.0f, Size.Y - 30.0f), FLinearColor(0.50f, 0.49f, 0.43f, 0.82f), 10, false, Size.X - 32.0f);
 			return;
+		}
+	}
+
+	void DrawContextMenu(
+		const FGeometry& Geometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId,
+		TArray<USurvivalHUDWidget::FContextActionHitBox>& ContextActionHitBoxes,
+		int32 ContextSlotIndex,
+		const FVector2D& DesiredPosition,
+		const UInventoryComponent* Inventory,
+		const UCraftingComponent* Crafting,
+		const FVector2D& ViewSize)
+	{
+		if (!Inventory || ContextSlotIndex == INDEX_NONE)
+		{
+			return;
+		}
+
+		const FInventoryStack Slot = Inventory->GetSlot(ContextSlotIndex);
+		if (Slot.IsEmpty())
+		{
+			return;
+		}
+
+		const FVector2D Size(172.0f, 178.0f);
+		FVector2D Position = DesiredPosition + FVector2D(10.0f, 10.0f);
+		Position.X = FMath::Clamp(Position.X, 16.0f, FMath::Max(16.0f, ViewSize.X - Size.X - 16.0f));
+		Position.Y = FMath::Clamp(Position.Y, 16.0f, FMath::Max(16.0f, ViewSize.Y - Size.Y - 16.0f));
+		DrawPanel(Geometry, OutDrawElements, LayerId, Position, Size, FLinearColor(0.58f, 0.48f, 0.30f, 1.0f));
+		DrawText(Geometry, OutDrawElements, LayerId + 8, Crafting ? Crafting->GetItemDisplayName(Slot.ItemId).ToString() : Slot.ItemId.ToString(), Position + FVector2D(14.0f, 12.0f), FLinearColor(0.92f, 0.90f, 0.80f, 1.0f), 12, true, Size.X - 28.0f);
+
+		const TArray<TPair<FName, FString>> Actions = {
+			TPair<FName, FString>(TEXT("Use"), TEXT("Benutzen")),
+			TPair<FName, FString>(TEXT("Equip"), TEXT("Ausruesten")),
+			TPair<FName, FString>(TEXT("Split"), TEXT("Teilen")),
+			TPair<FName, FString>(TEXT("Drop"), TEXT("Fallenlassen")),
+			TPair<FName, FString>(TEXT("Inspect"), TEXT("Untersuchen"))
+		};
+
+		for (int32 Index = 0; Index < Actions.Num(); ++Index)
+		{
+			const FVector2D RowPosition = Position + FVector2D(10.0f, 40.0f + Index * 26.0f);
+			const FVector2D RowSize(Size.X - 20.0f, 22.0f);
+			DrawBox(Geometry, OutDrawElements, LayerId + 10 + Index * 3, RowPosition, RowSize, FLinearColor(0.036f, 0.038f, 0.036f, 0.92f));
+			DrawText(Geometry, OutDrawElements, LayerId + 11 + Index * 3, Actions[Index].Value, RowPosition + FVector2D(10.0f, 4.0f), FLinearColor(0.78f, 0.76f, 0.66f, 0.92f), 10, false, RowSize.X - 20.0f);
+
+			USurvivalHUDWidget::FContextActionHitBox HitBox;
+			HitBox.ActionId = Actions[Index].Key;
+			HitBox.SlotIndex = ContextSlotIndex;
+			HitBox.Bounds = FSlateRect(RowPosition.X, RowPosition.Y, RowPosition.X + RowSize.X, RowPosition.Y + RowSize.Y);
+			ContextActionHitBoxes.Add(HitBox);
 		}
 	}
 
@@ -891,14 +1243,20 @@ namespace
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FRecipeHitBox>& RecipeHitBoxes,
 		TArray<USurvivalHUDWidget::FInventoryItemHitBox>& ItemHitBoxes,
+		TArray<USurvivalHUDWidget::FSlotHitBox>& SlotHitBoxes,
+		TArray<USurvivalHUDWidget::FContextActionHitBox>& ContextActionHitBoxes,
 		FName HoveredItemId,
 		FName SelectedItemId,
 		FName& SelectedRecipeId,
+		int32 ContextSlotIndex,
+		const FVector2D& ContextMenuPosition,
 		const ASurvivalCharacter* SurvivalCharacter,
 		const FVector2D& ViewSize)
 	{
 		RecipeHitBoxes.Reset();
 		ItemHitBoxes.Reset();
+		SlotHitBoxes.Reset();
+		ContextActionHitBoxes.Reset();
 		if (!SurvivalCharacter || !SurvivalCharacter->InventoryComponent)
 		{
 			return;
@@ -916,19 +1274,19 @@ namespace
 		DrawText(Geometry, OutDrawElements, LayerId + 9, TEXT("INVENTAR"), PanelPosition + FVector2D(30.0f, 24.0f), FLinearColor(0.90f, 0.88f, 0.76f, 0.96f), 20, true, 260.0f);
 		DrawText(Geometry, OutDrawElements, LayerId + 9, TEXT("Tab / Esc"), PanelPosition + FVector2D(PanelSize.X - 104.0f, 31.0f), FLinearColor(0.62f, 0.60f, 0.52f, 0.82f), 11, false, 90.0f);
 
-		TArray<FInventoryStack> AllStacks = Inventory->GetSortedStacks();
+		TArray<FInventoryStack> AllSlots = Inventory->GetSlots();
+		TArray<FInventoryStack> HotbarStacks = Inventory->GetHotbarStacks();
 		TArray<FInventoryStack> ToolStacks;
-		TArray<FInventoryStack> PackStacks;
-		for (const FInventoryStack& Stack : AllStacks)
+		for (const FInventoryStack& Stack : AllSlots)
 		{
+			if (Stack.IsEmpty())
+			{
+				continue;
+			}
 			const ESurvivalItemCategory Category = ItemCategory(Crafting, Stack.ItemId);
-			if (Category == ESurvivalItemCategory::Tool)
+			if (Category == ESurvivalItemCategory::Tool || Category == ESurvivalItemCategory::Weapon || Category == ESurvivalItemCategory::Armor)
 			{
 				ToolStacks.Add(Stack);
-			}
-			else
-			{
-				PackStacks.Add(Stack);
 			}
 		}
 
@@ -946,16 +1304,27 @@ namespace
 		const FVector2D ToolsPosition(PanelPosition.X + PanelSize.X - Gap - ToolWidth, ContentTop);
 		const FVector2D BottomPosition(PanelPosition.X + Gap, PanelPosition.Y + PanelSize.Y - BottomHeight - Gap);
 
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 20, ItemHitBoxes, PackPosition, FVector2D(LeftWidth, ContentHeight), TEXT("Rucksack"), PackStacks, Crafting, HoveredItemId, SelectedItemId, false);
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 130, ItemHitBoxes, ToolsPosition, FVector2D(ToolWidth, ContentHeight), TEXT("Ausrustung"), ToolStacks, Crafting, HoveredItemId, SelectedItemId, true);
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 220, ItemHitBoxes, BottomPosition, FVector2D(PanelSize.X - Gap * 2.0f, BottomHeight), TEXT("Quickslots"), AllStacks, Crafting, HoveredItemId, SelectedItemId, false);
+		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 20, ItemHitBoxes, SlotHitBoxes, PackPosition, FVector2D(LeftWidth, ContentHeight), TEXT("Rucksack"), AllSlots, Crafting, HoveredItemId, SelectedItemId, false, false, Inventory->GetEquippedSlotIndex());
+		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 130, ItemHitBoxes, SlotHitBoxes, ToolsPosition, FVector2D(ToolWidth, ContentHeight), TEXT("Ausrustung"), ToolStacks, Crafting, HoveredItemId, SelectedItemId, true, false, Inventory->GetEquippedSlotIndex());
+		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 220, ItemHitBoxes, SlotHitBoxes, BottomPosition, FVector2D(PanelSize.X - Gap * 2.0f, BottomHeight), TEXT("Quickslots"), HotbarStacks, Crafting, HoveredItemId, SelectedItemId, true, true, Inventory->GetEquippedSlotIndex());
+
+		DrawText(Geometry, OutDrawElements, LayerId + 222, FString::Printf(TEXT("%.1f / %.1f kg"), Inventory->GetCurrentWeightKg(), Inventory->GetMaxWeightKg()), BottomPosition + FVector2D(PanelSize.X - Gap * 2.0f - 116.0f, 14.0f), FLinearColor(0.70f, 0.68f, 0.58f, 0.86f), 11, true, 104.0f);
 
 		DrawPanel(Geometry, OutDrawElements, LayerId + 320, CraftListPosition, FVector2D(CraftWidth, ContentHeight), FLinearColor(0.46f, 0.50f, 0.42f, 1.0f));
 		DrawText(Geometry, OutDrawElements, LayerId + 328, TEXT("CRAFTING"), CraftListPosition + FVector2D(20.0f, 14.0f), FLinearColor(0.82f, 0.78f, 0.66f, 0.92f), 13, true, CraftWidth - 40.0f);
 
 		if (Crafting)
 		{
-			const TArray<FCraftingRecipe> Recipes = Crafting->GetKnownRecipes();
+			const FText CraftingMessage = Crafting->GetLastCraftingMessage();
+			if (!CraftingMessage.IsEmpty())
+			{
+				const FLinearColor MessageColor = Crafting->IsLastCraftingMessageError()
+					? FLinearColor(0.88f, 0.48f, 0.34f, 0.94f)
+					: FLinearColor(0.58f, 0.76f, 0.52f, 0.94f);
+				DrawText(Geometry, OutDrawElements, LayerId + 329, CraftingMessage.ToString(), CraftListPosition + FVector2D(124.0f, 14.0f), MessageColor, 11, true, CraftWidth - 146.0f);
+			}
+
+			const TArray<FCraftingRecipe> Recipes = Crafting->GetVisibleRecipes(true);
 			if ((SelectedRecipeId.IsNone() || !RecipeExists(Recipes, SelectedRecipeId)) && Recipes.Num() > 0)
 			{
 				SelectedRecipeId = Recipes[0].RecipeId;
@@ -978,12 +1347,13 @@ namespace
 			const FVector2D DetailSize(CraftListPosition.X + CraftWidth - DetailPosition.X - 18.0f, RecipeListSize.Y);
 			if (const FCraftingRecipe* SelectedRecipe = FindRecipe(Recipes, SelectedRecipeId))
 			{
-				DrawCraftingDetails(Geometry, OutDrawElements, LayerId + 410, RecipeHitBoxes, DetailPosition, DetailSize, *SelectedRecipe, Crafting, Inventory);
+				DrawCraftingDetails(Geometry, OutDrawElements, LayerId + 410, RecipeHitBoxes, ItemHitBoxes, SlotHitBoxes, DetailPosition, DetailSize, *SelectedRecipe, Crafting, Inventory, HoveredItemId, SelectedItemId);
 			}
 		}
 
 		const FName TooltipItemId = !HoveredItemId.IsNone() ? HoveredItemId : SelectedItemId;
-		DrawInventoryTooltip(Geometry, OutDrawElements, LayerId + 820, ItemHitBoxes, TooltipItemId, ViewSize);
+		DrawInventoryTooltip(Geometry, OutDrawElements, LayerId + 820, ItemHitBoxes, Crafting, TooltipItemId, ViewSize);
+		DrawContextMenu(Geometry, OutDrawElements, LayerId + 850, ContextActionHitBoxes, ContextSlotIndex, ContextMenuPosition, Inventory, Crafting, ViewSize);
 	}
 
 	void DrawLargeMapOverlay(
@@ -1030,6 +1400,8 @@ int32 USurvivalHUDWidget::NativePaint(
 	int32 CurrentLayer = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
 	RecipeHitBoxes.Reset();
 	InventoryItemHitBoxes.Reset();
+	SlotHitBoxes.Reset();
+	ContextActionHitBoxes.Reset();
 
 	const FVector2D ViewSize = AllottedGeometry.GetLocalSize();
 	const ASurvivalPlayerController* Controller = GetSurvivalController(this);
@@ -1042,11 +1414,12 @@ int32 USurvivalHUDWidget::NativePaint(
 
 	if (Controller->IsInventoryOpen())
 	{
-		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, InventoryItemHitBoxes, HoveredItemId, SelectedItemId, SelectedRecipeId, SurvivalCharacter, ViewSize);
+		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, InventoryItemHitBoxes, SlotHitBoxes, ContextActionHitBoxes, HoveredItemId, SelectedItemId, SelectedRecipeId, ContextSlotIndex, ContextMenuPosition, SurvivalCharacter, ViewSize);
 		return CurrentLayer + 900;
 	}
 
 	HoveredItemId = NAME_None;
+	ContextSlotIndex = INDEX_NONE;
 
 	if (Controller->IsMapOpen())
 	{
@@ -1062,12 +1435,70 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 {
 	ASurvivalPlayerController* Controller = GetSurvivalController(this);
 	ASurvivalCharacter* SurvivalCharacter = GetSurvivalCharacter(this);
-	if (!Controller || !Controller->IsInventoryOpen() || InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	if (!Controller || !Controller->IsInventoryOpen())
 	{
 		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 	}
 
 	const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+	LastMousePosition = LocalMousePosition;
+
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
+	{
+		ContextSlotIndex = INDEX_NONE;
+		for (const FInventoryItemHitBox& HitBox : InventoryItemHitBoxes)
+		{
+			if (!HitBox.bCraftingInput && ContainsPoint(HitBox.Bounds, LocalMousePosition))
+			{
+				ContextSlotIndex = HitBox.SlotIndex;
+				ContextMenuPosition = LocalMousePosition;
+				SelectedSlotIndex = HitBox.SlotIndex;
+				SelectedItemId = HitBox.ItemId;
+				return FReply::Handled();
+			}
+		}
+		return FReply::Handled();
+	}
+
+	if (InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+	}
+
+	for (const FContextActionHitBox& HitBox : ContextActionHitBoxes)
+	{
+		if (!ContainsPoint(HitBox.Bounds, LocalMousePosition) || !SurvivalCharacter || !SurvivalCharacter->InventoryComponent)
+		{
+			continue;
+		}
+
+		UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
+		if (HitBox.ActionId == TEXT("Use"))
+		{
+			Inventory->UseSlot(HitBox.SlotIndex);
+		}
+		else if (HitBox.ActionId == TEXT("Equip"))
+		{
+			Inventory->EquipSlot(HitBox.SlotIndex);
+		}
+		else if (HitBox.ActionId == TEXT("Split"))
+		{
+			Inventory->SplitStackHalf(HitBox.SlotIndex);
+		}
+		else if (HitBox.ActionId == TEXT("Drop"))
+		{
+			Inventory->DropSlot(HitBox.SlotIndex);
+		}
+		else if (HitBox.ActionId == TEXT("Inspect"))
+		{
+			SelectedSlotIndex = HitBox.SlotIndex;
+			SelectedItemId = Inventory->GetSlot(HitBox.SlotIndex).ItemId;
+		}
+
+		ContextSlotIndex = INDEX_NONE;
+		return FReply::Handled();
+	}
+
 	for (const FRecipeHitBox& HitBox : RecipeHitBoxes)
 	{
 		if (!ContainsPoint(HitBox.Bounds, LocalMousePosition))
@@ -1076,7 +1507,36 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		}
 
 		SelectedRecipeId = HitBox.RecipeId;
-		if (HitBox.bCraftButton && SurvivalCharacter && SurvivalCharacter->CraftingComponent)
+		if (HitBox.bAutoFillButton && SurvivalCharacter && SurvivalCharacter->CraftingComponent && SurvivalCharacter->InventoryComponent)
+		{
+			UCraftingComponent* Crafting = SurvivalCharacter->CraftingComponent;
+			UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
+			const TArray<FCraftingRecipe> Recipes = Crafting->GetVisibleRecipes(true);
+			if (const FCraftingRecipe* Recipe = FindRecipe(Recipes, HitBox.RecipeId))
+			{
+				Crafting->ClearCraftingInputs();
+				for (const FCraftingIngredient& Ingredient : Recipe->Ingredients)
+				{
+					int32 Remaining = Ingredient.Count;
+					for (const FInventoryStack& Slot : Inventory->GetSlots())
+					{
+						if (Remaining <= 0)
+						{
+							break;
+						}
+						if (Slot.ItemId == Ingredient.ItemId && Slot.Count > 0)
+						{
+							const int32 MoveCount = FMath::Min(Remaining, Slot.Count);
+							if (Crafting->AddInventorySlotToCrafting(Slot.SlotIndex, MoveCount))
+							{
+								Remaining -= MoveCount;
+							}
+						}
+					}
+				}
+			}
+		}
+		else if (HitBox.bCraftButton && SurvivalCharacter && SurvivalCharacter->CraftingComponent)
 		{
 			SurvivalCharacter->CraftingComponent->CraftRecipe(HitBox.RecipeId);
 		}
@@ -1088,8 +1548,69 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		if (ContainsPoint(HitBox.Bounds, LocalMousePosition))
 		{
 			SelectedItemId = HitBox.ItemId;
+			SelectedSlotIndex = HitBox.SlotIndex;
+			ContextSlotIndex = INDEX_NONE;
+			DraggedSlotIndex = HitBox.SlotIndex;
+			bDraggedFromCraftingInput = HitBox.bCraftingInput;
 			return FReply::Handled();
 		}
+	}
+
+	ContextSlotIndex = INDEX_NONE;
+	return FReply::Handled();
+}
+
+FReply USurvivalHUDWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	ASurvivalPlayerController* Controller = GetSurvivalController(this);
+	ASurvivalCharacter* SurvivalCharacter = GetSurvivalCharacter(this);
+	if (!Controller || !Controller->IsInventoryOpen() || InMouseEvent.GetEffectingButton() != EKeys::LeftMouseButton)
+	{
+		return Super::NativeOnMouseButtonUp(InGeometry, InMouseEvent);
+	}
+
+	const int32 ReleasedSlotIndex = DraggedSlotIndex;
+	const bool bReleasedFromCraftingInput = bDraggedFromCraftingInput;
+	DraggedSlotIndex = INDEX_NONE;
+	bDraggedFromCraftingInput = false;
+
+	if (ReleasedSlotIndex == INDEX_NONE || !SurvivalCharacter)
+	{
+		return FReply::Handled();
+	}
+
+	const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+	for (const FSlotHitBox& HitBox : SlotHitBoxes)
+	{
+		if (!ContainsPoint(HitBox.Bounds, LocalMousePosition))
+		{
+			continue;
+		}
+
+		if (bReleasedFromCraftingInput)
+		{
+			if (!HitBox.bCraftingInput && SurvivalCharacter->CraftingComponent)
+			{
+				SurvivalCharacter->CraftingComponent->RemoveCraftingInput(ReleasedSlotIndex);
+			}
+		}
+		else if (SurvivalCharacter->InventoryComponent)
+		{
+			if (HitBox.bHotbarSlot)
+			{
+				SurvivalCharacter->InventoryComponent->AssignSlotToHotbar(ReleasedSlotIndex, HitBox.HotbarIndex);
+			}
+			else if (HitBox.bCraftingInput && SurvivalCharacter->CraftingComponent)
+			{
+				SurvivalCharacter->CraftingComponent->AddInventorySlotToCrafting(ReleasedSlotIndex, -1);
+			}
+			else if (HitBox.SlotIndex != INDEX_NONE && HitBox.SlotIndex != ReleasedSlotIndex)
+			{
+				SurvivalCharacter->InventoryComponent->MoveStack(ReleasedSlotIndex, HitBox.SlotIndex);
+			}
+		}
+
+		return FReply::Handled();
 	}
 
 	return FReply::Handled();
@@ -1105,6 +1626,7 @@ FReply USurvivalHUDWidget::NativeOnMouseMove(const FGeometry& InGeometry, const 
 	}
 
 	const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+	LastMousePosition = LocalMousePosition;
 	HoveredItemId = NAME_None;
 	for (const FInventoryItemHitBox& HitBox : InventoryItemHitBoxes)
 	{
@@ -1121,5 +1643,7 @@ FReply USurvivalHUDWidget::NativeOnMouseMove(const FGeometry& InGeometry, const 
 void USurvivalHUDWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 {
 	HoveredItemId = NAME_None;
+	DraggedSlotIndex = INDEX_NONE;
+	bDraggedFromCraftingInput = false;
 	Super::NativeOnMouseLeave(InMouseEvent);
 }

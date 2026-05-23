@@ -1,0 +1,109 @@
+{
+  "items": [
+    {
+      "id": "Wood",
+      "display_name": "Holzscheit",
+      "category": "Resource",
+      "rarity": "Common",
+      "weight_kg": 0.85,
+      "max_stack": 30,
+      "icon": "/Game/UI/Survival/Textures/Items/item_wood_log",
+      "preview_mesh": "/Game/Survival/Items/Meshes/SM_WoodLog",
+      "preview_scale": [1.0, 1.0, 1.0]
+    },
+    {
+      "id": "Stick",
+      "display_name": "Stock",
+      "category": "Resource",
+      "rarity": "Common",
+      "weight_kg": 0.18,
+      "max_stack": 40,
+      "icon": "/Game/UI/Survival/Textures/Items/item_stick",
+      "preview_mesh": "/Game/Survival/Items/Meshes/SM_Stick"
+    },
+    {
+      "id": "Stone",
+      "display_name": "Stein",
+      "category": "Resource",
+      "rarity": "Common",
+      "weight_kg": 0.45,
+      "max_stack": 40,
+      "icon": "/Game/UI/Survival/Textures/Items/item_stone",
+      "preview_mesh": "/Game/Survival/Items/Meshes/SM_Stone"
+    },
+    {
+      "id": "PlantFiber",
+      "display_name": "Pflanzenfaser",
+      "category": "Resource",
+      "rarity": "Common",
+      "weight_kg": 0.03,
+      "max_stack": 60,
+      "icon": "/Game/UI/Survival/Textures/Items/item_plant_fiber"
+    },
+    {
+      "id": "WaterBottle",
+      "display_name": "Wasserflasche",
+      "category": "Drink",
+      "rarity": "Common",
+      "weight_kg": 0.55,
+      "max_stack": 5,
+      "icon": "/Game/UI/Survival/Textures/Items/item_water_bottle",
+      "use_type": "Consume",
+      "effects": [{"type": "Thirst", "magnitude": 38.0}]
+    },
+    {
+      "id": "Bandage",
+      "display_name": "Verband",
+      "category": "Medicine",
+      "rarity": "Common",
+      "weight_kg": 0.05,
+      "max_stack": 10,
+      "icon": "/Game/UI/Survival/Textures/Items/item_bandage",
+      "use_type": "Consume",
+      "effects": [
+        {"type": "Health", "magnitude": 12.0},
+        {"type": "Bleeding", "magnitude": -100.0, "removes_negative_state": true}
+      ]
+    },
+    {
+      "id": "StoneAxe",
+      "display_name": "Steinaxt",
+      "category": "Tool",
+      "rarity": "Common",
+      "weight_kg": 1.1,
+      "max_stack": 1,
+      "durability": 70.0,
+      "icon": "/Game/UI/Survival/Textures/Items/item_primitive_axe",
+      "preview_mesh": "/Game/Survival/Items/Meshes/SM_StoneAxe"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "PrimitiveTool",
+      "category": "Tools",
+      "station": "None",
+      "craft_time_seconds": 1.5,
+      "ingredients": [{"item": "Stick", "count": 1}, {"item": "Stone", "count": 1}],
+      "output": {"item": "PrimitiveTool", "count": 1},
+      "unlocked_by_default": true
+    },
+    {
+      "id": "StoneAxe",
+      "category": "Tools",
+      "station": "None",
+      "craft_time_seconds": 4.0,
+      "ingredients": [{"item": "Stick", "count": 1}, {"item": "Stone", "count": 1}, {"item": "PlantFiber", "count": 2}],
+      "output": {"item": "StoneAxe", "count": 1},
+      "unlocked_by_default": true
+    },
+    {
+      "id": "CookedMeat",
+      "category": "Food",
+      "station": "Campfire",
+      "craft_time_seconds": 5.0,
+      "ingredients": [{"item": "RawMeat", "count": 1}],
+      "output": {"item": "CookedMeat", "count": 1},
+      "unlocked_by_default": true
+    }
+  ]
+}
