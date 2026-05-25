@@ -1,24 +1,5 @@
 # CHANGES
 
-## Survival-Meilenstein: Interaktion, Ressourcen, Bauen, Container, Campfire, Save
-
-### Neu/erweitert
-- Interaktion bleibt Line-Trace-basiert und zeigt jetzt `E`-Prompts plus Feedback bei blockierten Aktionen.
-- World-Pickups nutzen weiter `AItemPickupActor` und legen Items ins bestehende `UInventoryComponent`; bei vollem Inventar bleibt der Pickup liegen.
-- Ressourcenquellen wurden von Einzel-Output auf datengetriebene Loot-Tabellen, Lebenspunkte, Werkzeugtypen, Bare-Hand-Fallback und Depleted-State erweitert.
-- Werkzeuge besitzen nun ToolType, Effizienz, Harvest-Schaden, Haltbarkeitsverlust und Brennstoffdaten.
-- Neues modulares Bausystem unter `Source/SurvivalWorldUE5/Public|Private/Building` mit Build-Catalog, Ghost Preview, Rotation, Valid/Invalid-State, Materialkosten und Snap für Wände an Fundamente.
-- Neue Buildables: Fundament, Wand, Tuer, Dach, Lagerkiste, Lagerfeuer, Werkbank, Schlafsack.
-- Lagerkiste und Lagerfeuer besitzen eigene Inventare; das HUD kann Items zwischen Spielerinventar und offenem World-Inventory transferieren.
-- Lagerfeuer verbraucht Brennstoff-Items ueber deren Itemdaten, kocht rohes Fleisch zu gekochtem Fleisch und kocht schmutziges Wasser zu sauberem Wasser ab.
-- SaveGame speichert nun Spielerwerte, Inventar/Hotbar, Ressourcen, gebaute Objekte, Container-Inhalte und Campfire-Zustand.
-- Debug-Execs im PlayerController: `GiveItem`, `SpawnResource`, `SaveSurvival`, `LoadSurvival`, `SelectBuildPart`.
-- GameMode spawnt in der aktuellen Testumgebung einen kleinen Milestone-Parcours mit Pickups und Baum/Felsen/Busch.
-
-### Pruefung
-- `SurvivalWorldUE5Editor Mac Development`: erfolgreich.
-- Headless Automation `Automation RunTests SurvivalWorld`: 7 Tests, alle erfolgreich.
-
 ## Angepasste Dateien
 - `Source/SurvivalWorldUE5/Public/UI/SurvivalHUDWidget.h`
 - `Source/SurvivalWorldUE5/Private/UI/SurvivalHUDWidget.cpp`

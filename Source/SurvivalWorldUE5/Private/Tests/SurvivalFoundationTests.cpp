@@ -5,7 +5,6 @@
 #include "Engine/GameInstance.h"
 #include "GameFramework/Actor.h"
 #include "Items/InventoryComponent.h"
-#include "Resources/ResourceNodeComponent.h"
 #include "Survival/SurvivalStatsComponent.h"
 #include "World/WorldSeedSubsystem.h"
 
@@ -163,103 +162,6 @@ bool FWorldSeedStableIdFormatTest::RunTest(const FString& Parameters)
 
 	TestEqual(TEXT("Stable IDs are deterministic"), StableIdA, StableIdB);
 	TestTrue(TEXT("Stable ID includes category"), StableIdA.StartsWith(TEXT("Iron_42")));
-
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSurvivalMilestoneItemDataTest,
-	"SurvivalWorld.Milestone.ItemData.ToolsFuelAndRecipes",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSurvivalMilestoneItemDataTest::RunTest(const FString& Parameters)
-{
-	const FItemDef* StoneAxe = USurvivalItemCatalog::FindDefaultItem(TEXT("StoneAxe"));
-	TestNotNull(TEXT("Stone axe item exists"), StoneAxe);
-	TestTrue(TEXT("Stone axe is an axe tool"), StoneAxe && StoneAxe->bIsTool && StoneAxe->ToolType == ESurvivalToolType::Axe);
-	TestTrue(TEXT("Stone axe has durability"), StoneAxe && StoneAxe->bHasDurability && StoneAxe->MaxDurability > 0.0f);
-
-	const FItemDef* Wood = USurvivalItemCatalog::FindDefaultItem(TEXT("Wood"));
-	TestTrue(TEXT("Wood is fuel"), Wood && Wood->bCanUseAsFuel && Wood->FuelSeconds > 0.0f);
-
-	TestNotNull(TEXT("Building hammer item exists"), USurvivalItemCatalog::FindDefaultItem(TEXT("BuildingHammer")));
-	TestNotNull(TEXT("Clean water item exists"), USurvivalItemCatalog::FindDefaultItem(TEXT("CleanWater")));
-	TestNotNull(TEXT("Storage chest recipe exists"), USurvivalItemCatalog::FindDefaultRecipe(TEXT("StorageChest")));
-	TestNotNull(TEXT("Building hammer recipe exists"), USurvivalItemCatalog::FindDefaultRecipe(TEXT("BuildingHammer")));
-
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSurvivalMilestoneInventoryTransferTest,
-	"SurvivalWorld.Milestone.Inventory.TransferAndBrokenTool",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSurvivalMilestoneInventoryTransferTest::RunTest(const FString& Parameters)
-{
-	AActor* PlayerOwner = NewObject<AActor>();
-	UInventoryComponent* PlayerInventory = NewObject<UInventoryComponent>(PlayerOwner);
-	PlayerOwner->AddOwnedComponent(PlayerInventory);
-
-	AActor* ChestOwner = NewObject<AActor>();
-	UInventoryComponent* ChestInventory = NewObject<UInventoryComponent>(ChestOwner);
-	ChestOwner->AddOwnedComponent(ChestInventory);
-	ChestInventory->InventorySlotCount = 4;
-	ChestInventory->MaxWeightKg = 50.0f;
-
-	TestTrue(TEXT("Add wood to player inventory"), PlayerInventory->AddItem(TEXT("Wood"), 4));
-	const int32 WoodSlot = FindFirstSlotWithItem(PlayerInventory, TEXT("Wood"));
-	TestTrue(TEXT("Transfer wood into chest"), PlayerInventory->TransferSlotTo(ChestInventory, WoodSlot, 2));
-	TestEqual(TEXT("Player keeps remaining wood"), PlayerInventory->GetItemCount(TEXT("Wood")), 2);
-	TestEqual(TEXT("Chest receives wood"), ChestInventory->GetItemCount(TEXT("Wood")), 2);
-
-	TestTrue(TEXT("Add axe with durability"), PlayerInventory->AddItem(TEXT("StoneAxe"), 1));
-	const int32 AxeSlot = FindFirstSlotWithItem(PlayerInventory, TEXT("StoneAxe"));
-	TestTrue(TEXT("Damage axe to broken state"), PlayerInventory->DamageItemDurability(AxeSlot, 999.0f, true));
-	TestFalse(TEXT("Broken axe cannot be used"), PlayerInventory->UseSlot(AxeSlot));
-	TestEqual(TEXT("Broken axe remains in inventory"), PlayerInventory->GetItemCount(TEXT("StoneAxe")), 1);
-
-	return true;
-}
-
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(
-	FSurvivalMilestoneResourceHarvestTest,
-	"SurvivalWorld.Milestone.Resources.TreeLootAndDurability",
-	EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-
-bool FSurvivalMilestoneResourceHarvestTest::RunTest(const FString& Parameters)
-{
-	AActor* Owner = NewObject<AActor>();
-	UInventoryComponent* Inventory = NewObject<UInventoryComponent>(Owner);
-	UResourceNodeComponent* Resource = NewObject<UResourceNodeComponent>(Owner);
-	Owner->AddOwnedComponent(Inventory);
-	Owner->AddOwnedComponent(Resource);
-
-	TestTrue(TEXT("Add axe"), Inventory->AddItem(TEXT("StoneAxe"), 1));
-	const int32 AxeSlot = FindFirstSlotWithItem(Inventory, TEXT("StoneAxe"));
-	const float InitialDurability = Inventory->GetSlot(AxeSlot).Durability;
-
-	FResourceNodeDef TreeDef;
-	TreeDef.ResourceNodeId = TEXT("Tree");
-	TreeDef.DisplayName = NSLOCTEXT("SurvivalWorld", "TestTreeNode", "Baum");
-	TreeDef.RequiredToolType = ESurvivalToolType::Axe;
-	TreeDef.bAllowBareHands = true;
-	TreeDef.MaxHealth = 4.0f;
-	TreeDef.MaxHarvests = 1;
-	TreeDef.BaseHarvestDamage = 1.0f;
-	TreeDef.ToolDurabilityCost = 1.0f;
-	FResourceLootEntry WoodLoot;
-	WoodLoot.ItemId = TEXT("Wood");
-	WoodLoot.MinCount = 2;
-	WoodLoot.MaxCount = 2;
-	TreeDef.Loot.Add(WoodLoot);
-	Resource->ConfigureFromDefinition(TreeDef);
-
-	FName HarvestedItemId;
-	int32 HarvestedAmount = 0;
-	TestTrue(TEXT("Tree can be harvested with stone axe"), Resource->Harvest(Owner, HarvestedItemId, HarvestedAmount));
-	TestEqual(TEXT("Tree adds wood loot"), Inventory->GetItemCount(TEXT("Wood")), 2);
-	TestTrue(TEXT("Axe durability decreases"), Inventory->GetSlot(AxeSlot).Durability < InitialDurability);
 
 	return true;
 }

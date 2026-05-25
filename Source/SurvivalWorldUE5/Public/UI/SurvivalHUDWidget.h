@@ -25,13 +25,10 @@ public:
 		FName ItemId = NAME_None;
 		int32 SlotIndex = INDEX_NONE;
 		bool bCraftingInput = false;
-		bool bWorldInventory = false;
 		FString DisplayName;
 		FString Category;
 		FString Description;
 		int32 Count = 0;
-		float Durability = 0.0f;
-		float MaxDurability = 0.0f;
 		FSlateRect Bounds;
 	};
 
@@ -40,7 +37,6 @@ public:
 		int32 SlotIndex = INDEX_NONE;
 		bool bCraftingInput = false;
 		bool bHotbarSlot = false;
-		bool bWorldInventory = false;
 		int32 HotbarIndex = INDEX_NONE;
 		FSlateRect Bounds;
 	};
@@ -49,7 +45,6 @@ public:
 	{
 		FName ActionId = NAME_None;
 		int32 SlotIndex = INDEX_NONE;
-		bool bWorldInventory = false;
 		FSlateRect Bounds;
 	};
 
@@ -78,10 +73,8 @@ private:
 	mutable FName SelectedRecipeId = NAME_None;
 	mutable int32 SelectedSlotIndex = INDEX_NONE;
 	mutable int32 ContextSlotIndex = INDEX_NONE;
-	mutable bool bContextFromWorldInventory = false;
 	mutable int32 DraggedSlotIndex = INDEX_NONE;
 	mutable bool bDraggedFromCraftingInput = false;
-	mutable bool bDraggedFromWorldInventory = false;
 	mutable FVector2D LastMousePosition = FVector2D::ZeroVector;
 	mutable FVector2D ContextMenuPosition = FVector2D::ZeroVector;
 };

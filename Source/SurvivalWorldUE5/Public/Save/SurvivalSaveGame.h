@@ -17,66 +17,6 @@ struct SURVIVALWORLDUE5_API FResourceNodeSaveState
 	int32 RemainingHarvests = 0;
 };
 
-USTRUCT(BlueprintType)
-struct SURVIVALWORLDUE5_API FSurvivalStatsSaveState
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadWrite)
-	float Health = 100.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Hunger = 100.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Thirst = 100.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Stamina = 100.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float TemperatureCelsius = 37.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Fatigue = 0.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Disease = 0.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Bleeding = 0.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float Poison = 0.0f;
-};
-
-USTRUCT(BlueprintType)
-struct SURVIVALWORLDUE5_API FBuildableActorSaveState
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadWrite)
-	FName PartId = NAME_None;
-
-	UPROPERTY(BlueprintReadWrite)
-	FString StableBuildId;
-
-	UPROPERTY(BlueprintReadWrite)
-	FTransform Transform;
-
-	UPROPERTY(BlueprintReadWrite)
-	TArray<FInventoryStack> InventorySlotSnapshot;
-
-	UPROPERTY(BlueprintReadWrite)
-	bool bCampfireLit = false;
-
-	UPROPERTY(BlueprintReadWrite)
-	float CampfireFuelSeconds = 0.0f;
-
-	UPROPERTY(BlueprintReadWrite)
-	float CampfireCookSeconds = 0.0f;
-};
-
 UCLASS(BlueprintType)
 class SURVIVALWORLDUE5_API USurvivalSaveGame : public USaveGame
 {
@@ -93,9 +33,6 @@ public:
 	FTransform PlayerTransform;
 
 	UPROPERTY(BlueprintReadWrite)
-	FSurvivalStatsSaveState PlayerStats;
-
-	UPROPERTY(BlueprintReadWrite)
 	TMap<FName, int32> InventorySnapshot;
 
 	UPROPERTY(BlueprintReadWrite)
@@ -109,7 +46,4 @@ public:
 
 	UPROPERTY(BlueprintReadWrite)
 	TArray<FResourceNodeSaveState> ResourceNodes;
-
-	UPROPERTY(BlueprintReadWrite)
-	TArray<FBuildableActorSaveState> BuiltActors;
 };
