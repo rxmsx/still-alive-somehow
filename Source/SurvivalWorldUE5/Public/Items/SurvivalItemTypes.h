@@ -63,6 +63,18 @@ enum class ESurvivalItemUseType : uint8
 };
 
 UENUM(BlueprintType)
+enum class ESurvivalToolType : uint8
+{
+	None,
+	Hand,
+	Axe,
+	Pickaxe,
+	Knife,
+	Hammer,
+	FireStarter
+};
+
+UENUM(BlueprintType)
 enum class ECraftingStationType : uint8
 {
 	None,
@@ -204,6 +216,24 @@ struct SURVIVALWORLDUE5_API FItemDef
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsTool = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bIsTool"))
+	ESurvivalToolType ToolType = ESurvivalToolType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", EditCondition = "bIsTool"))
+	float ToolDamage = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", EditCondition = "bIsTool"))
+	float HarvestEfficiency = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", EditCondition = "bHasDurability"))
+	float DurabilityLossPerUse = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bCanUseAsFuel = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", EditCondition = "bCanUseAsFuel"))
+	float FuelSeconds = 0.0f;
+
 	int32 GetEffectiveMaxStack() const { return bStackable ? FMath::Max(1, MaxStack) : 1; }
 	float GetSpawnDurability() const { return bHasDurability ? FMath::Max(1.0f, MaxDurability) : 0.0f; }
 };
@@ -281,6 +311,27 @@ struct SURVIVALWORLDUE5_API FCraftingRecipe
 };
 
 USTRUCT(BlueprintType)
+struct SURVIVALWORLDUE5_API FResourceLootEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
+	int32 MinCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0"))
+	int32 MaxCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float Chance = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bOnlyWhenDepleted = false;
+};
+
+USTRUCT(BlueprintType)
 struct SURVIVALWORLDUE5_API FResourceNodeDef
 {
 	GENERATED_BODY()
@@ -295,13 +346,37 @@ struct SURVIVALWORLDUE5_API FResourceNodeDef
 	FName OutputItemId = NAME_None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<FResourceLootEntry> Loot;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FName RequiredToolItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	ESurvivalToolType RequiredToolType = ESurvivalToolType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<ESurvivalToolType> AlternativeToolTypes;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bAllowBareHands = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
 	int32 AmountPerHarvest = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
 	int32 MaxHarvests = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1.0"))
+	float MaxHealth = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.1"))
+	float BaseHarvestDamage = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0"))
+	float WrongToolDamageMultiplier = 0.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0"))
+	float ToolDurabilityCost = 1.0f;
 };
 
 USTRUCT(BlueprintType)

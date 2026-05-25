@@ -38,12 +38,25 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		{
 			static const TMap<FName, FString> IconNames = {
 				{ TEXT("Wood"), TEXT("item_wood_log") },
+				{ TEXT("Bark"), TEXT("item_wood_log") },
 				{ TEXT("PlantFiber"), TEXT("item_plant_fiber") },
+				{ TEXT("Berries"), TEXT("item_raw_meat") },
+				{ TEXT("Herbs"), TEXT("item_plant_fiber") },
 				{ TEXT("RawMeat"), TEXT("item_raw_meat") },
 				{ TEXT("CookedMeat"), TEXT("item_cooked_meat") },
+				{ TEXT("CleanWater"), TEXT("item_water_bottle") },
 				{ TEXT("WaterBottle"), TEXT("item_water_bottle") },
 				{ TEXT("DirtyWater"), TEXT("item_dirty_water") },
 				{ TEXT("StoneAxe"), TEXT("item_primitive_axe") },
+				{ TEXT("Flint"), TEXT("item_sharpened_stone") },
+				{ TEXT("BuildingHammer"), TEXT("item_primitive_tool") },
+				{ TEXT("Foundation"), TEXT("item_wood_log") },
+				{ TEXT("Wall"), TEXT("item_wood_log") },
+				{ TEXT("Door"), TEXT("item_wood_log") },
+				{ TEXT("Roof"), TEXT("item_wood_log") },
+				{ TEXT("StorageChest"), TEXT("item_simple_backpack") },
+				{ TEXT("Workbench"), TEXT("item_primitive_tool") },
+				{ TEXT("Bedroll"), TEXT("item_primitive_clothing") },
 				{ TEXT("SimpleBackpack"), TEXT("item_simple_backpack") },
 				{ TEXT("PrimitiveClothing"), TEXT("item_primitive_clothing") },
 				{ TEXT("PrimitiveTool"), TEXT("item_primitive_tool") },
@@ -90,16 +103,47 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 			Item.UseType = UseType;
 			Item.bEquippable = bEquippable;
 			Item.bHotbarAllowed = bHotbarAllowed;
-			Item.bIsTool = UseType == ESurvivalItemUseType::UseTool || bEquippable;
+			Item.bIsTool = Item.bIsTool || UseType == ESurvivalItemUseType::UseTool;
 		};
 
-		AddItem(TEXT("Wood"), NSLOCTEXT("SurvivalWorld", "ItemWoodLog", "Holzscheit"), NSLOCTEXT("SurvivalWorld", "ItemWoodLogDescription", "Trockenes, raues Holz fuer Feuer, Reparaturen und einfache Konstruktionen."), ESurvivalItemCategory::Resource, 30, 0.85f, ESurvivalItemRarity::Common, 100);
-		AddItem(TEXT("Stick"), NSLOCTEXT("SurvivalWorld", "ItemStick", "Stock"), NSLOCTEXT("SurvivalWorld", "ItemStickDescription", "Ein gerader trockener Ast fuer Griffe, Schienen und einfache Werkzeuge."), ESurvivalItemCategory::Resource, 40, 0.18f, ESurvivalItemRarity::Common, 110);
+		auto ConfigureTool = [&Items](int32 Index, ESurvivalToolType ToolType, float ToolDamage, float HarvestEfficiency, float DurabilityLossPerUse = 1.0f)
+		{
+			FItemDef& Item = Items[Index];
+			Item.bIsTool = true;
+			Item.ToolType = ToolType;
+			Item.ToolDamage = ToolDamage;
+			Item.HarvestEfficiency = HarvestEfficiency;
+			Item.DurabilityLossPerUse = DurabilityLossPerUse;
+		};
+
+		auto ConfigureFuel = [&Items](int32 Index, float FuelSeconds)
+		{
+			FItemDef& Item = Items[Index];
+			Item.bCanUseAsFuel = true;
+			Item.FuelSeconds = FuelSeconds;
+		};
+
+		const int32 WoodIndex = AddItem(TEXT("Wood"), NSLOCTEXT("SurvivalWorld", "ItemWoodLog", "Holz"), NSLOCTEXT("SurvivalWorld", "ItemWoodLogDescription", "Trockenes, raues Holz fuer Feuer, Reparaturen und einfache Konstruktionen."), ESurvivalItemCategory::Resource, 30, 0.85f, ESurvivalItemRarity::Common, 100);
+		ConfigureFuel(WoodIndex, 45.0f);
+		const int32 StickIndex = AddItem(TEXT("Stick"), NSLOCTEXT("SurvivalWorld", "ItemStick", "Stock"), NSLOCTEXT("SurvivalWorld", "ItemStickDescription", "Ein gerader trockener Ast fuer Griffe, Schienen und einfache Werkzeuge."), ESurvivalItemCategory::Resource, 40, 0.18f, ESurvivalItemRarity::Common, 110);
+		ConfigureFuel(StickIndex, 18.0f);
 		AddItem(TEXT("Stone"), NSLOCTEXT("SurvivalWorld", "ItemStone", "Stein"), NSLOCTEXT("SurvivalWorld", "ItemStoneDescription", "Ein dichter Feldstein mit brauchbaren Kanten."), ESurvivalItemCategory::Resource, 40, 0.45f, ESurvivalItemRarity::Common, 120);
+		AddItem(TEXT("Flint"), NSLOCTEXT("SurvivalWorld", "ItemFlint", "Feuerstein"), NSLOCTEXT("SurvivalWorld", "ItemFlintDescription", "Harter Stein, der Funken schlaegt und scharfe Kanten halten kann."), ESurvivalItemCategory::Resource, 30, 0.22f, ESurvivalItemRarity::Common, 125);
 		AddItem(TEXT("PlantFiber"), NSLOCTEXT("SurvivalWorld", "ItemPlantFiber", "Pflanzenfaser"), NSLOCTEXT("SurvivalWorld", "ItemPlantFiberDescription", "Getrocknete Fasern zum Binden, Flechten und Abdichten."), ESurvivalItemCategory::Resource, 60, 0.03f, ESurvivalItemRarity::Common, 130);
+		AddItem(TEXT("Bark"), NSLOCTEXT("SurvivalWorld", "ItemBark", "Rinde"), NSLOCTEXT("SurvivalWorld", "ItemBarkDescription", "Trockene Baumrinde fuer Zunder, einfache Medizin und provisorische Abdichtung."), ESurvivalItemCategory::Resource, 40, 0.08f, ESurvivalItemRarity::Common, 135);
 		AddItem(TEXT("Rope"), NSLOCTEXT("SurvivalWorld", "ItemRope", "Seil"), NSLOCTEXT("SurvivalWorld", "ItemRopeDescription", "Ein raues, belastbares Seil aus Pflanzenfasern."), ESurvivalItemCategory::Resource, 20, 0.32f, ESurvivalItemRarity::Common, 140);
 		AddItem(TEXT("Cloth"), NSLOCTEXT("SurvivalWorld", "ItemCloth", "Stoff"), NSLOCTEXT("SurvivalWorld", "ItemClothDescription", "Verschmutzter, aber brauchbarer Stoff fuer Verband und einfache Ausruestung."), ESurvivalItemCategory::Resource, 30, 0.08f, ESurvivalItemRarity::Common, 150);
 		AddItem(TEXT("Hide"), NSLOCTEXT("SurvivalWorld", "ItemHide", "Fell"), NSLOCTEXT("SurvivalWorld", "ItemHideDescription", "Grob gereinigtes Fell, warm und widerstandsfaehig."), ESurvivalItemCategory::Resource, 10, 0.65f, ESurvivalItemRarity::Uncommon, 160);
+
+		const int32 BerriesIndex = AddItem(TEXT("Berries"), NSLOCTEXT("SurvivalWorld", "ItemBerries", "Beeren"), NSLOCTEXT("SurvivalWorld", "ItemBerriesDescription", "Essbare Waldbeeren. Nicht sehr saettigend, aber besser als nichts."), ESurvivalItemCategory::Food, 12, 0.06f, ESurvivalItemRarity::Common, 200);
+		ConfigureUse(BerriesIndex, ESurvivalItemUseType::Consume);
+		AddEffect(Items[BerriesIndex], ESurvivalItemEffectType::Hunger, 6.0f);
+		AddEffect(Items[BerriesIndex], ESurvivalItemEffectType::Thirst, 3.0f);
+
+		const int32 HerbsIndex = AddItem(TEXT("Herbs"), NSLOCTEXT("SurvivalWorld", "ItemHerbs", "Kraeuter"), NSLOCTEXT("SurvivalWorld", "ItemHerbsDescription", "Bittere Heilpflanzen fuer einfache Medizin und Tee."), ESurvivalItemCategory::Medicine, 16, 0.04f, ESurvivalItemRarity::Common, 205);
+		ConfigureUse(HerbsIndex, ESurvivalItemUseType::Consume);
+		AddEffect(Items[HerbsIndex], ESurvivalItemEffectType::Health, 3.0f);
+		AddEffect(Items[HerbsIndex], ESurvivalItemEffectType::Disease, -10.0f, true);
 
 		const int32 RawMeatIndex = AddItem(TEXT("RawMeat"), NSLOCTEXT("SurvivalWorld", "ItemRawMeat", "Rohes Fleisch"), NSLOCTEXT("SurvivalWorld", "ItemRawMeatDescription", "Verderbliches rohes Fleisch. Gekocht ist es deutlich sicherer."), ESurvivalItemCategory::Food, 8, 0.35f, ESurvivalItemRarity::Common, 220);
 		Items[RawMeatIndex].bPerishable = true;
@@ -119,6 +163,10 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		ConfigureUse(WaterIndex, ESurvivalItemUseType::Consume);
 		AddEffect(Items[WaterIndex], ESurvivalItemEffectType::Thirst, 38.0f);
 
+		const int32 CleanWaterIndex = AddItem(TEXT("CleanWater"), NSLOCTEXT("SurvivalWorld", "ItemCleanWater", "Sauberes Wasser"), NSLOCTEXT("SurvivalWorld", "ItemCleanWaterDescription", "Abgekochtes Wasser ohne sichtbaren Schmutz. Sicher trinkbar."), ESurvivalItemCategory::Drink, 5, 0.50f, ESurvivalItemRarity::Common, 245);
+		ConfigureUse(CleanWaterIndex, ESurvivalItemUseType::Consume);
+		AddEffect(Items[CleanWaterIndex], ESurvivalItemEffectType::Thirst, 36.0f);
+
 		const int32 DirtyWaterIndex = AddItem(TEXT("DirtyWater"), NSLOCTEXT("SurvivalWorld", "ItemDirtyWater", "Schmutziges Wasser"), NSLOCTEXT("SurvivalWorld", "ItemDirtyWaterDescription", "Ungefiltertes Wasser. Loescht Durst, kann aber krank machen."), ESurvivalItemCategory::Drink, 5, 0.58f, ESurvivalItemRarity::Common, 250);
 		ConfigureUse(DirtyWaterIndex, ESurvivalItemUseType::Consume);
 		AddEffect(Items[DirtyWaterIndex], ESurvivalItemEffectType::Thirst, 18.0f);
@@ -137,18 +185,22 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		const int32 PrimitiveToolIndex = AddItem(TEXT("PrimitiveTool"), NSLOCTEXT("SurvivalWorld", "ItemPrimitiveTool", "Primitives Werkzeug"), NSLOCTEXT("SurvivalWorld", "ItemPrimitiveToolDescription", "Ein grobes Werkzeug aus Stock und Stein. Zerbrechlich, aber nuetzlich."), ESurvivalItemCategory::Tool, 1, 0.65f, ESurvivalItemRarity::Common, 400);
 		ConfigureDurability(PrimitiveToolIndex, 35.0f);
 		ConfigureUse(PrimitiveToolIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(PrimitiveToolIndex, ESurvivalToolType::Knife, 3.0f, 0.55f, 1.2f);
 
 		const int32 StoneAxeIndex = AddItem(TEXT("StoneAxe"), NSLOCTEXT("SurvivalWorld", "ItemStoneAxe", "Steinaxt"), NSLOCTEXT("SurvivalWorld", "ItemStoneAxeDescription", "Eine einfache Axt mit Steinblatt und Faserbindung."), ESurvivalItemCategory::Tool, 1, 1.10f, ESurvivalItemRarity::Common, 410);
 		ConfigureDurability(StoneAxeIndex, 70.0f);
 		ConfigureUse(StoneAxeIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(StoneAxeIndex, ESurvivalToolType::Axe, 9.0f, 1.0f, 1.0f);
 
 		const int32 SharpenedStoneIndex = AddItem(TEXT("SharpenedStone"), NSLOCTEXT("SurvivalWorld", "ItemSharpenedStone", "Geschaerfter Stein"), NSLOCTEXT("SurvivalWorld", "ItemSharpenedStoneDescription", "Eine scharfe Steinkante zum Schneiden und Kratzen."), ESurvivalItemCategory::Tool, 1, 0.38f, ESurvivalItemRarity::Common, 420);
 		ConfigureDurability(SharpenedStoneIndex, 25.0f);
 		ConfigureUse(SharpenedStoneIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(SharpenedStoneIndex, ESurvivalToolType::Knife, 2.5f, 0.70f, 1.0f);
 
 		const int32 TorchIndex = AddItem(TEXT("Torch"), NSLOCTEXT("SurvivalWorld", "ItemTorch", "Fackel"), NSLOCTEXT("SurvivalWorld", "ItemTorchDescription", "Eine primitive Lichtquelle aus Holz und trockener Faser."), ESurvivalItemCategory::Tool, 1, 0.55f, ESurvivalItemRarity::Common, 430);
 		ConfigureDurability(TorchIndex, 120.0f);
 		ConfigureUse(TorchIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(TorchIndex, ESurvivalToolType::FireStarter, 1.0f, 0.25f, 0.5f);
 
 		const int32 SpearIndex = AddItem(TEXT("Spear"), NSLOCTEXT("SurvivalWorld", "ItemSpear", "Speer"), NSLOCTEXT("SurvivalWorld", "ItemSpearDescription", "Ein gebundener Holzspeer fuer Jagd und Verteidigung."), ESurvivalItemCategory::Weapon, 1, 1.25f, ESurvivalItemRarity::Common, 500);
 		ConfigureDurability(SpearIndex, 80.0f);
@@ -157,13 +209,35 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		const int32 AxeIndex = AddItem(TEXT("Axe"), NSLOCTEXT("SurvivalWorld", "ItemAxe", "Axt"), NSLOCTEXT("SurvivalWorld", "ItemAxeDescription", "Eine abgenutzte Axt mit Stahlkopf fuer Holz und leichte Hindernisse."), ESurvivalItemCategory::Tool, 1, 1.45f, ESurvivalItemRarity::Uncommon, 510);
 		ConfigureDurability(AxeIndex, 120.0f);
 		ConfigureUse(AxeIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(AxeIndex, ESurvivalToolType::Axe, 14.0f, 1.45f, 0.8f);
 
 		const int32 PickaxeIndex = AddItem(TEXT("Pickaxe"), NSLOCTEXT("SurvivalWorld", "ItemPickaxe", "Spitzhacke"), NSLOCTEXT("SurvivalWorld", "ItemPickaxeDescription", "Schweres Werkzeug fuer Stein, Erz und harte Hindernisse."), ESurvivalItemCategory::Tool, 1, 2.10f, ESurvivalItemRarity::Uncommon, 520);
 		ConfigureDurability(PickaxeIndex, 140.0f);
 		ConfigureUse(PickaxeIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(PickaxeIndex, ESurvivalToolType::Pickaxe, 13.0f, 1.35f, 0.9f);
+
+		const int32 BuildingHammerIndex = AddItem(TEXT("BuildingHammer"), NSLOCTEXT("SurvivalWorld", "ItemBuildingHammer", "Bauhammer"), NSLOCTEXT("SurvivalWorld", "ItemBuildingHammerDescription", "Ein einfacher Hammer zum Ausrichten, Platzieren und Reparieren grober Bauteile."), ESurvivalItemCategory::Tool, 1, 0.90f, ESurvivalItemRarity::Common, 530);
+		ConfigureDurability(BuildingHammerIndex, 95.0f);
+		ConfigureUse(BuildingHammerIndex, ESurvivalItemUseType::UseTool, true);
+		ConfigureTool(BuildingHammerIndex, ESurvivalToolType::Hammer, 1.0f, 1.0f, 0.25f);
 
 		const int32 CampfireIndex = AddItem(TEXT("Campfire"), NSLOCTEXT("SurvivalWorld", "ItemCampfire", "Lagerfeuer"), NSLOCTEXT("SurvivalWorld", "ItemCampfireDescription", "Eine einfache Feuerstelle zum Kochen, Trocknen und Reinigen von Wasser."), ESurvivalItemCategory::Building, 1, 3.0f, ESurvivalItemRarity::Common, 600);
 		ConfigureUse(CampfireIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+
+		const int32 FoundationIndex = AddItem(TEXT("Foundation"), NSLOCTEXT("SurvivalWorld", "ItemFoundation", "Fundament"), NSLOCTEXT("SurvivalWorld", "ItemFoundationDescription", "Grobes Holzfundament als Basis fuer einfache Huetten und Lagerplaetze."), ESurvivalItemCategory::Building, 1, 6.0f, ESurvivalItemRarity::Common, 610);
+		ConfigureUse(FoundationIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 WallIndex = AddItem(TEXT("Wall"), NSLOCTEXT("SurvivalWorld", "ItemWall", "Wand"), NSLOCTEXT("SurvivalWorld", "ItemWallDescription", "Einfache Holz-/Faserwand, die an Fundamente snappen kann."), ESurvivalItemCategory::Building, 1, 4.0f, ESurvivalItemRarity::Common, 620);
+		ConfigureUse(WallIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 DoorIndex = AddItem(TEXT("Door"), NSLOCTEXT("SurvivalWorld", "ItemDoor", "Tuer"), NSLOCTEXT("SurvivalWorld", "ItemDoorDescription", "Schmale Tueroeffnung fuer primitive Unterkuenfte."), ESurvivalItemCategory::Building, 1, 3.5f, ESurvivalItemRarity::Common, 630);
+		ConfigureUse(DoorIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 RoofIndex = AddItem(TEXT("Roof"), NSLOCTEXT("SurvivalWorld", "ItemRoof", "Dach"), NSLOCTEXT("SurvivalWorld", "ItemRoofDescription", "Ein geneigtes Dachteil gegen Regen und Wind."), ESurvivalItemCategory::Building, 1, 4.5f, ESurvivalItemRarity::Common, 640);
+		ConfigureUse(RoofIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 StorageChestIndex = AddItem(TEXT("StorageChest"), NSLOCTEXT("SurvivalWorld", "ItemStorageChest", "Lagerkiste"), NSLOCTEXT("SurvivalWorld", "ItemStorageChestDescription", "Robuste Holzkiste mit eigenem Inventar."), ESurvivalItemCategory::Building, 1, 4.0f, ESurvivalItemRarity::Common, 650);
+		ConfigureUse(StorageChestIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 WorkbenchIndex = AddItem(TEXT("Workbench"), NSLOCTEXT("SurvivalWorld", "ItemWorkbench", "Werkbank"), NSLOCTEXT("SurvivalWorld", "ItemWorkbenchDescription", "Primitive Arbeitsflaeche fuer stationaeres Crafting."), ESurvivalItemCategory::Building, 1, 5.5f, ESurvivalItemRarity::Common, 660);
+		ConfigureUse(WorkbenchIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
+		const int32 BedrollIndex = AddItem(TEXT("Bedroll"), NSLOCTEXT("SurvivalWorld", "ItemBedroll", "Schlafsack"), NSLOCTEXT("SurvivalWorld", "ItemBedrollDescription", "Ein einfacher Schlafplatz aus Stoff und Pflanzenfaser."), ESurvivalItemCategory::Building, 1, 1.6f, ESurvivalItemRarity::Common, 670);
+		ConfigureUse(BedrollIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);
 
 		const int32 BackpackIndex = AddItem(TEXT("SimpleBackpack"), NSLOCTEXT("SurvivalWorld", "ItemSimpleBackpack", "Einfacher Rucksack"), NSLOCTEXT("SurvivalWorld", "ItemSimpleBackpackDescription", "Ein kleiner Stoffrucksack, der spaeter als Kapazitaetsbonus ausgeruestet werden kann."), ESurvivalItemCategory::Armor, 1, 0.95f, ESurvivalItemRarity::Uncommon, 700);
 		ConfigureDurability(BackpackIndex, 80.0f);
@@ -212,14 +286,19 @@ const TArray<FCraftingRecipe>& USurvivalItemCatalog::GetDefaultRecipes()
 		};
 
 		AddRecipe(TEXT("PrimitiveTool"), NSLOCTEXT("SurvivalWorld", "RecipePrimitiveTool", "Primitives Werkzeug"), NSLOCTEXT("SurvivalWorld", "RecipePrimitiveToolDescription", "Stock und Stein zu einem groben Starterwerkzeug verbinden."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 0.0f, TEXT("PrimitiveTool"), 1, { Ingredient(TEXT("Stick"), 1), Ingredient(TEXT("Stone"), 1) });
-		AddRecipe(TEXT("StoneAxe"), NSLOCTEXT("SurvivalWorld", "RecipeStoneAxe", "Steinaxt"), NSLOCTEXT("SurvivalWorld", "RecipeStoneAxeDescription", "Steinblatt mit Pflanzenfasern an einem Stock befestigen."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 4.0f, TEXT("StoneAxe"), 1, { Ingredient(TEXT("Stick"), 1), Ingredient(TEXT("Stone"), 1), Ingredient(TEXT("PlantFiber"), 2) });
+		AddRecipe(TEXT("StoneAxe"), NSLOCTEXT("SurvivalWorld", "RecipeStoneAxe", "Steinaxt"), NSLOCTEXT("SurvivalWorld", "RecipeStoneAxeDescription", "Steinblatt mit Pflanzenfasern an einem Stock befestigen."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 4.0f, TEXT("StoneAxe"), 1, { Ingredient(TEXT("Stick"), 1), Ingredient(TEXT("Stone"), 1), Ingredient(TEXT("PlantFiber"), 1) });
+		AddRecipe(TEXT("Pickaxe"), NSLOCTEXT("SurvivalWorld", "RecipePickaxe", "Spitzhacke"), NSLOCTEXT("SurvivalWorld", "RecipePickaxeDescription", "Holzschaft, Steinspitze und Faserbindung zu einer einfachen Spitzhacke verbinden."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 5.0f, TEXT("Pickaxe"), 1, { Ingredient(TEXT("Wood"), 1), Ingredient(TEXT("Stone"), 1), Ingredient(TEXT("PlantFiber"), 1) });
+		AddRecipe(TEXT("BuildingHammer"), NSLOCTEXT("SurvivalWorld", "RecipeBuildingHammer", "Bauhammer"), NSLOCTEXT("SurvivalWorld", "RecipeBuildingHammerDescription", "Holzgriff und Faserbindung zu einem einfachen Bauhammer verarbeiten."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 3.0f, TEXT("BuildingHammer"), 1, { Ingredient(TEXT("Wood"), 1), Ingredient(TEXT("PlantFiber"), 1) });
 		AddRecipe(TEXT("Torch"), NSLOCTEXT("SurvivalWorld", "RecipeTorch", "Fackel"), NSLOCTEXT("SurvivalWorld", "RecipeTorchDescription", "Trockenes Holz mit Faser umwickeln."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 2.5f, TEXT("Torch"), 1, { Ingredient(TEXT("Wood"), 1), Ingredient(TEXT("PlantFiber"), 2) });
 		AddRecipe(TEXT("SharpenedStone"), NSLOCTEXT("SurvivalWorld", "RecipeSharpenedStone", "Geschaerfter Stein"), NSLOCTEXT("SurvivalWorld", "RecipeSharpenedStoneDescription", "Zwei Steine gegeneinander schlagen, bis eine scharfe Kante entsteht."), ECraftingRecipeCategory::Tools, ECraftingStationType::None, 1.2f, TEXT("SharpenedStone"), 1, { Ingredient(TEXT("Stone"), 2) });
 		AddRecipe(TEXT("Spear"), NSLOCTEXT("SurvivalWorld", "RecipeSpear", "Speer"), NSLOCTEXT("SurvivalWorld", "RecipeSpearDescription", "Holz und Seil zu einem einfachen Jagdspeer verbinden."), ECraftingRecipeCategory::Weapons, ECraftingStationType::None, 4.5f, TEXT("Spear"), 1, { Ingredient(TEXT("Wood"), 1), Ingredient(TEXT("Rope"), 1) });
 		AddRecipe(TEXT("Bandage"), NSLOCTEXT("SurvivalWorld", "RecipeBandage", "Verband"), NSLOCTEXT("SurvivalWorld", "RecipeBandageDescription", "Stoff mit Alkohol desinfizieren und zu einem Notverband wickeln."), ECraftingRecipeCategory::Medicine, ECraftingStationType::MedicalTable, 3.0f, TEXT("Bandage"), 2, { Ingredient(TEXT("Cloth"), 1), Ingredient(TEXT("Alcohol"), 1) });
 		AddRecipe(TEXT("CookedMeat"), NSLOCTEXT("SurvivalWorld", "RecipeCookedMeat", "Gekochtes Fleisch"), NSLOCTEXT("SurvivalWorld", "RecipeCookedMeatDescription", "Rohes Fleisch am Feuer garen."), ECraftingRecipeCategory::Food, ECraftingStationType::Campfire, 5.0f, TEXT("CookedMeat"), 1, { Ingredient(TEXT("RawMeat"), 1) });
-		AddRecipe(TEXT("CleanWater"), NSLOCTEXT("SurvivalWorld", "RecipeCleanWater", "Sauberes Wasser"), NSLOCTEXT("SurvivalWorld", "RecipeCleanWaterDescription", "Schmutziges Wasser abkochen."), ECraftingRecipeCategory::Food, ECraftingStationType::Campfire, 4.0f, TEXT("WaterBottle"), 1, { Ingredient(TEXT("DirtyWater"), 1) });
-		AddRecipe(TEXT("Campfire"), NSLOCTEXT("SurvivalWorld", "RecipeCampfire", "Lagerfeuer"), NSLOCTEXT("SurvivalWorld", "RecipeCampfireDescription", "Holz und Steine zu einer kleinen Feuerstelle aufschichten."), ECraftingRecipeCategory::Building, ECraftingStationType::None, 6.0f, TEXT("Campfire"), 1, { Ingredient(TEXT("Wood"), 3), Ingredient(TEXT("Stone"), 4) });
+		AddRecipe(TEXT("CleanWater"), NSLOCTEXT("SurvivalWorld", "RecipeCleanWater", "Sauberes Wasser"), NSLOCTEXT("SurvivalWorld", "RecipeCleanWaterDescription", "Schmutziges Wasser abkochen."), ECraftingRecipeCategory::Food, ECraftingStationType::Campfire, 4.0f, TEXT("CleanWater"), 1, { Ingredient(TEXT("DirtyWater"), 1) });
+		AddRecipe(TEXT("Campfire"), NSLOCTEXT("SurvivalWorld", "RecipeCampfire", "Lagerfeuer"), NSLOCTEXT("SurvivalWorld", "RecipeCampfireDescription", "Holz und Steine zu einer kleinen Feuerstelle aufschichten."), ECraftingRecipeCategory::Building, ECraftingStationType::None, 4.0f, TEXT("Campfire"), 1, { Ingredient(TEXT("Wood"), 2), Ingredient(TEXT("Stone"), 4) });
+		AddRecipe(TEXT("StorageChest"), NSLOCTEXT("SurvivalWorld", "RecipeStorageChest", "Lagerkiste"), NSLOCTEXT("SurvivalWorld", "RecipeStorageChestDescription", "Holz und Stein zu einer einfachen Lagerkiste zusammensetzen."), ECraftingRecipeCategory::Building, ECraftingStationType::None, 5.0f, TEXT("StorageChest"), 1, { Ingredient(TEXT("Wood"), 4), Ingredient(TEXT("Stone"), 2) });
+		AddRecipe(TEXT("Workbench"), NSLOCTEXT("SurvivalWorld", "RecipeWorkbench", "Werkbank"), NSLOCTEXT("SurvivalWorld", "RecipeWorkbenchDescription", "Eine primitive Arbeitsflaeche aus Holz und Pflanzenfaser bauen."), ECraftingRecipeCategory::Building, ECraftingStationType::None, 6.0f, TEXT("Workbench"), 1, { Ingredient(TEXT("Wood"), 4), Ingredient(TEXT("PlantFiber"), 3) });
+		AddRecipe(TEXT("Bedroll"), NSLOCTEXT("SurvivalWorld", "RecipeBedroll", "Schlafsack"), NSLOCTEXT("SurvivalWorld", "RecipeBedrollDescription", "Stoff und Pflanzenfaser zu einem einfachen Schlafplatz verbinden."), ECraftingRecipeCategory::Building, ECraftingStationType::None, 5.0f, TEXT("Bedroll"), 1, { Ingredient(TEXT("Cloth"), 2), Ingredient(TEXT("PlantFiber"), 2) });
 		AddRecipe(TEXT("SimpleBackpack"), NSLOCTEXT("SurvivalWorld", "RecipeSimpleBackpack", "Einfacher Rucksack"), NSLOCTEXT("SurvivalWorld", "RecipeSimpleBackpackDescription", "Stoff mit Seil auf einem Holzrahmen befestigen."), ECraftingRecipeCategory::Clothing, ECraftingStationType::Workbench, 8.0f, TEXT("SimpleBackpack"), 1, { Ingredient(TEXT("Wood"), 1), Ingredient(TEXT("Rope"), 2), Ingredient(TEXT("Cloth"), 3) });
 		AddRecipe(TEXT("PrimitiveClothing"), NSLOCTEXT("SurvivalWorld", "RecipePrimitiveClothing", "Primitive Kleidung"), NSLOCTEXT("SurvivalWorld", "RecipePrimitiveClothingDescription", "Fell mit Pflanzenfasern zu einfacher Schutzkleidung verschnueren."), ECraftingRecipeCategory::Clothing, ECraftingStationType::None, 6.0f, TEXT("PrimitiveClothing"), 1, { Ingredient(TEXT("Hide"), 2), Ingredient(TEXT("PlantFiber"), 4) });
 

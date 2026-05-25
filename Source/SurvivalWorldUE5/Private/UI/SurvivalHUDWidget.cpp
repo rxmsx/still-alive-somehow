@@ -1,5 +1,8 @@
 #include "UI/SurvivalHUDWidget.h"
 
+#include "Building/BuildingComponent.h"
+#include "Building/CampfireActor.h"
+#include "Building/StorageContainerActor.h"
 #include "Crafting/CraftingComponent.h"
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
@@ -588,16 +591,21 @@ namespace
 		const FSlateRect& Bounds,
 		const FInventoryStack& Stack,
 		const UCraftingComponent* Crafting,
-		bool bCraftingInput = false)
+		bool bCraftingInput = false,
+		bool bWorldInventory = false)
 	{
 		USurvivalHUDWidget::FInventoryItemHitBox HitBox;
 		HitBox.ItemId = Stack.ItemId;
 		HitBox.SlotIndex = Stack.SlotIndex;
 		HitBox.bCraftingInput = bCraftingInput;
+		HitBox.bWorldInventory = bWorldInventory;
 		HitBox.DisplayName = ItemDisplayName(Crafting, Stack.ItemId);
 		HitBox.Category = CategoryLabel(ItemCategory(Crafting, Stack.ItemId));
 		HitBox.Description = ItemDescription(Crafting, Stack.ItemId);
 		HitBox.Count = Stack.Count;
+		HitBox.Durability = Stack.Durability;
+		FItemDef ItemDef;
+		HitBox.MaxDurability = Crafting && Crafting->GetItemDefinition(Stack.ItemId, ItemDef) && ItemDef.bHasDurability ? ItemDef.MaxDurability : 0.0f;
 		HitBox.Bounds = Bounds;
 		ItemHitBoxes.Add(HitBox);
 	}
@@ -608,12 +616,14 @@ namespace
 		int32 SlotIndex,
 		bool bCraftingInput = false,
 		bool bHotbarSlot = false,
+		bool bWorldInventory = false,
 		int32 HotbarIndex = INDEX_NONE)
 	{
 		USurvivalHUDWidget::FSlotHitBox HitBox;
 		HitBox.SlotIndex = SlotIndex;
 		HitBox.bCraftingInput = bCraftingInput;
 		HitBox.bHotbarSlot = bHotbarSlot;
+		HitBox.bWorldInventory = bWorldInventory;
 		HitBox.HotbarIndex = HotbarIndex;
 		HitBox.Bounds = Bounds;
 		SlotHitBoxes.Add(HitBox);
@@ -634,6 +644,7 @@ namespace
 		bool bEquipped = false,
 		bool bCraftingInput = false,
 		bool bHotbarSlot = false,
+		bool bWorldInventory = false,
 		int32 HotbarIndex = INDEX_NONE)
 	{
 		const ESurvivalItemCategory Category = ItemCategory(Crafting, Stack.ItemId);
@@ -679,9 +690,18 @@ namespace
 			DrawText(Geometry, OutDrawElements, LayerId + 14, FString::Printf(TEXT("%d"), Stack.Count), CountTagPosition + FVector2D(6.0f, 1.0f), FLinearColor(0.92f, 0.88f, 0.74f, 1.0f), 10, true, 26.0f);
 		}
 
+		if (ItemDef.bHasDurability && ItemDef.MaxDurability > 0.0f)
+		{
+			const float DurabilityAlpha = FMath::Clamp(Stack.Durability / ItemDef.MaxDurability, 0.0f, 1.0f);
+			const FVector2D BarPosition = SlotPosition + FVector2D(8.0f, SlotSize.Y - 9.0f);
+			const FVector2D BarSize(SlotSize.X - 16.0f, 3.0f);
+			DrawBox(Geometry, OutDrawElements, LayerId + 15, BarPosition, BarSize, FLinearColor(0.010f, 0.010f, 0.010f, 0.86f));
+			DrawBox(Geometry, OutDrawElements, LayerId + 16, BarPosition, FVector2D(BarSize.X * DurabilityAlpha, BarSize.Y), DurabilityAlpha <= 0.0f ? FLinearColor(0.70f, 0.12f, 0.10f, 0.92f) : FLinearColor(0.44f, 0.72f, 0.38f, 0.86f));
+		}
+
 		const FSlateRect Bounds(SlotPosition.X, SlotPosition.Y, SlotPosition.X + SlotSize.X, SlotPosition.Y + SlotSize.Y);
-		AddSlotHitBox(SlotHitBoxes, Bounds, Stack.SlotIndex, bCraftingInput, bHotbarSlot, HotbarIndex);
-		AddInventoryHitBox(ItemHitBoxes, Bounds, Stack, Crafting, bCraftingInput);
+		AddSlotHitBox(SlotHitBoxes, Bounds, Stack.SlotIndex, bCraftingInput, bHotbarSlot, bWorldInventory, HotbarIndex);
+		AddInventoryHitBox(ItemHitBoxes, Bounds, Stack, Crafting, bCraftingInput, bWorldInventory);
 	}
 
 	void DrawMapBackground(
@@ -904,23 +924,38 @@ namespace
 			DrawLine(Geometry, OutDrawElements, LayerId + 150, CrosshairCenter + FVector2D(-6.0f, 0.0f), CrosshairCenter + FVector2D(6.0f, 0.0f), FLinearColor(0.86f, 0.86f, 0.78f, 0.72f), 1.0f);
 			DrawLine(Geometry, OutDrawElements, LayerId + 150, CrosshairCenter + FVector2D(0.0f, -6.0f), CrosshairCenter + FVector2D(0.0f, 6.0f), FLinearColor(0.86f, 0.86f, 0.78f, 0.72f), 1.0f);
 
-			const FVector TraceStart = SurvivalCharacter->FirstPersonCamera->GetComponentLocation();
-			const FVector TraceEnd = TraceStart + SurvivalCharacter->FirstPersonCamera->GetForwardVector() * SurvivalCharacter->InteractionRange;
-			FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SurvivalHudWidgetInteractTrace), false, SurvivalCharacter);
-			FHitResult HitResult;
-			if (Widget && Widget->GetWorld() && Widget->GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+			bool bCanInteract = false;
+			const FText Prompt = SurvivalCharacter->GetCurrentInteractionPrompt(bCanInteract);
+			if (!Prompt.IsEmpty())
 			{
-				AActor* HitActor = HitResult.GetActor();
-				if (HitActor && HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
-				{
-					const bool bCanInteract = IInteractable::Execute_CanInteract(HitActor, SurvivalCharacter);
-					const FText Prompt = IInteractable::Execute_GetInteractionPrompt(HitActor, SurvivalCharacter);
-					const FString PromptText = FString::Printf(TEXT("F  %s"), *Prompt.ToString());
-					const FVector2D PromptSize(230.0f, 34.0f);
-					const FVector2D PromptPosition(CrosshairCenter.X - PromptSize.X * 0.5f, CrosshairCenter.Y + 26.0f);
-					DrawBox(Geometry, OutDrawElements, LayerId + 151, PromptPosition, PromptSize, FLinearColor(0.014f, 0.016f, 0.016f, 0.68f));
-					DrawText(Geometry, OutDrawElements, LayerId + 152, PromptText, PromptPosition + FVector2D(16.0f, 7.0f), bCanInteract ? FLinearColor(0.92f, 0.90f, 0.80f, 1.0f) : FLinearColor(0.55f, 0.55f, 0.50f, 1.0f), 13, true, PromptSize.X - 28.0f);
-				}
+				const FString PromptText = FString::Printf(TEXT("E  %s"), *Prompt.ToString());
+				const FVector2D PromptSize(260.0f, 34.0f);
+				const FVector2D PromptPosition(CrosshairCenter.X - PromptSize.X * 0.5f, CrosshairCenter.Y + 26.0f);
+				DrawBox(Geometry, OutDrawElements, LayerId + 151, PromptPosition, PromptSize, FLinearColor(0.014f, 0.016f, 0.016f, 0.68f));
+				DrawText(Geometry, OutDrawElements, LayerId + 152, PromptText, PromptPosition + FVector2D(16.0f, 7.0f), bCanInteract ? FLinearColor(0.92f, 0.90f, 0.80f, 1.0f) : FLinearColor(0.88f, 0.42f, 0.28f, 1.0f), 13, true, PromptSize.X - 28.0f);
+			}
+
+			const FText Feedback = SurvivalCharacter->GetInteractionFeedback();
+			if (!Feedback.IsEmpty())
+			{
+				const FVector2D FeedbackSize(360.0f, 30.0f);
+				const FVector2D FeedbackPosition(CrosshairCenter.X - FeedbackSize.X * 0.5f, CrosshairCenter.Y + 66.0f);
+				DrawBox(Geometry, OutDrawElements, LayerId + 153, FeedbackPosition, FeedbackSize, FLinearColor(0.025f, 0.020f, 0.016f, 0.72f));
+				DrawText(Geometry, OutDrawElements, LayerId + 154, Feedback.ToString(), FeedbackPosition + FVector2D(14.0f, 6.0f), FLinearColor(0.92f, 0.70f, 0.48f, 0.96f), 11, true, FeedbackSize.X - 28.0f);
+			}
+
+			if (SurvivalCharacter->BuildingComponent && SurvivalCharacter->BuildingComponent->IsBuildModeActive())
+			{
+				FSurvivalBuildPartDef BuildPart;
+				const FString PartName = SurvivalCharacter->BuildingComponent->GetSelectedBuildPartDefinition(BuildPart)
+					? BuildPart.DisplayName.ToString()
+					: SurvivalCharacter->BuildingComponent->GetSelectedBuildPartId().ToString();
+				const FVector2D BuildPanelSize(360.0f, 74.0f);
+				const FVector2D BuildPanelPosition(CrosshairCenter.X - BuildPanelSize.X * 0.5f, CrosshairCenter.Y - 134.0f);
+				DrawBox(Geometry, OutDrawElements, LayerId + 160, BuildPanelPosition, BuildPanelSize, FLinearColor(0.018f, 0.020f, 0.020f, 0.78f));
+				DrawBox(Geometry, OutDrawElements, LayerId + 161, BuildPanelPosition, FVector2D(4.0f, BuildPanelSize.Y), SurvivalCharacter->BuildingComponent->IsPlacementValid() ? FLinearColor(0.28f, 0.78f, 0.34f, 0.90f) : FLinearColor(0.88f, 0.22f, 0.16f, 0.90f));
+				DrawText(Geometry, OutDrawElements, LayerId + 162, FString::Printf(TEXT("BAUEN  %s"), *PartName), BuildPanelPosition + FVector2D(16.0f, 12.0f), FLinearColor(0.92f, 0.90f, 0.78f, 0.96f), 13, true, BuildPanelSize.X - 32.0f);
+				DrawText(Geometry, OutDrawElements, LayerId + 162, SurvivalCharacter->BuildingComponent->GetPlacementMessage().ToString(), BuildPanelPosition + FVector2D(16.0f, 36.0f), SurvivalCharacter->BuildingComponent->IsPlacementValid() ? FLinearColor(0.66f, 0.86f, 0.58f, 0.92f) : FLinearColor(0.94f, 0.50f, 0.36f, 0.92f), 11, false, BuildPanelSize.X - 32.0f);
 			}
 		}
 	}
@@ -1134,6 +1169,7 @@ namespace
 		FName SelectedItemId,
 		bool bTreatAsEquipped,
 		bool bTreatAsHotbar = false,
+		bool bWorldInventory = false,
 		int32 EquippedSlotIndex = INDEX_NONE)
 	{
 		DrawPanel(Geometry, OutDrawElements, LayerId, Position, Size);
@@ -1156,7 +1192,7 @@ namespace
 			if (Stacks.IsValidIndex(SlotIndex) && !Stacks[SlotIndex].IsEmpty())
 			{
 				const bool bEquipped = bTreatAsEquipped && Stacks[SlotIndex].SlotIndex == EquippedSlotIndex;
-				DrawInventoryItemInSlot(Geometry, OutDrawElements, LayerId + 12 + SlotIndex * 18, ItemHitBoxes, SlotHitBoxes, SlotPosition, SlotSize, Stacks[SlotIndex], Crafting, HoveredItemId, SelectedItemId, bEquipped, false, bTreatAsHotbar, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
+				DrawInventoryItemInSlot(Geometry, OutDrawElements, LayerId + 12 + SlotIndex * 18, ItemHitBoxes, SlotHitBoxes, SlotPosition, SlotSize, Stacks[SlotIndex], Crafting, HoveredItemId, SelectedItemId, bEquipped, false, bTreatAsHotbar, bWorldInventory, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
 			}
 			else
 			{
@@ -1164,7 +1200,7 @@ namespace
 				if (Stacks.IsValidIndex(SlotIndex) || bTreatAsHotbar)
 				{
 					const int32 HitSlotIndex = Stacks.IsValidIndex(SlotIndex) ? Stacks[SlotIndex].SlotIndex : INDEX_NONE;
-					AddSlotHitBox(SlotHitBoxes, SlotBounds, HitSlotIndex, false, bTreatAsHotbar, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
+					AddSlotHitBox(SlotHitBoxes, SlotBounds, HitSlotIndex, false, bTreatAsHotbar, bWorldInventory, bTreatAsHotbar ? SlotIndex : INDEX_NONE);
 				}
 			}
 		}
@@ -1217,7 +1253,7 @@ namespace
 				MetaText = FString::Printf(TEXT("%s   %.2f kg   Stack %d"), *RarityLabel(ItemDef.Rarity), ItemDef.WeightKg, ItemDef.GetEffectiveMaxStack());
 				if (ItemDef.bHasDurability)
 				{
-					MetaText += FString::Printf(TEXT("   Haltbarkeit %.0f"), ItemDef.MaxDurability);
+					MetaText += FString::Printf(TEXT("   Haltbarkeit %.0f / %.0f"), HitBox.Durability, ItemDef.MaxDurability);
 				}
 			}
 			DrawText(Geometry, OutDrawElements, LayerId + 8, MetaText, Position + FVector2D(16.0f, Size.Y - 30.0f), FLinearColor(0.50f, 0.49f, 0.43f, 0.82f), 10, false, Size.X - 32.0f);
@@ -1231,36 +1267,51 @@ namespace
 		int32 LayerId,
 		TArray<USurvivalHUDWidget::FContextActionHitBox>& ContextActionHitBoxes,
 		int32 ContextSlotIndex,
+		bool bContextWorldInventory,
 		const FVector2D& DesiredPosition,
 		const UInventoryComponent* Inventory,
+		const UInventoryComponent* WorldInventory,
 		const UCraftingComponent* Crafting,
 		const FVector2D& ViewSize)
 	{
-		if (!Inventory || ContextSlotIndex == INDEX_NONE)
+		const UInventoryComponent* SourceInventory = bContextWorldInventory ? WorldInventory : Inventory;
+		if (!SourceInventory || ContextSlotIndex == INDEX_NONE)
 		{
 			return;
 		}
 
-		const FInventoryStack Slot = Inventory->GetSlot(ContextSlotIndex);
+		const FInventoryStack Slot = SourceInventory->GetSlot(ContextSlotIndex);
 		if (Slot.IsEmpty())
 		{
 			return;
 		}
 
-		const FVector2D Size(172.0f, 178.0f);
+		const FVector2D Size(172.0f, bContextWorldInventory ? 104.0f : 204.0f);
 		FVector2D Position = DesiredPosition + FVector2D(10.0f, 10.0f);
 		Position.X = FMath::Clamp(Position.X, 16.0f, FMath::Max(16.0f, ViewSize.X - Size.X - 16.0f));
 		Position.Y = FMath::Clamp(Position.Y, 16.0f, FMath::Max(16.0f, ViewSize.Y - Size.Y - 16.0f));
 		DrawPanel(Geometry, OutDrawElements, LayerId, Position, Size, FLinearColor(0.58f, 0.48f, 0.30f, 1.0f));
 		DrawText(Geometry, OutDrawElements, LayerId + 8, Crafting ? Crafting->GetItemDisplayName(Slot.ItemId).ToString() : Slot.ItemId.ToString(), Position + FVector2D(14.0f, 12.0f), FLinearColor(0.92f, 0.90f, 0.80f, 1.0f), 12, true, Size.X - 28.0f);
 
-		const TArray<TPair<FName, FString>> Actions = {
-			TPair<FName, FString>(TEXT("Use"), TEXT("Benutzen")),
-			TPair<FName, FString>(TEXT("Equip"), TEXT("Ausruesten")),
-			TPair<FName, FString>(TEXT("Split"), TEXT("Teilen")),
-			TPair<FName, FString>(TEXT("Drop"), TEXT("Fallenlassen")),
-			TPair<FName, FString>(TEXT("Inspect"), TEXT("Untersuchen"))
-		};
+		TArray<TPair<FName, FString>> Actions;
+		if (bContextWorldInventory)
+		{
+			Actions = {
+				TPair<FName, FString>(TEXT("Take"), TEXT("Nehmen")),
+				TPair<FName, FString>(TEXT("Inspect"), TEXT("Untersuchen"))
+			};
+		}
+		else
+		{
+			Actions = {
+				TPair<FName, FString>(TEXT("Use"), TEXT("Benutzen")),
+				TPair<FName, FString>(TEXT("Equip"), TEXT("Ausruesten")),
+				TPair<FName, FString>(TEXT("Split"), TEXT("Teilen")),
+				TPair<FName, FString>(TEXT("Drop"), TEXT("Fallenlassen")),
+				TPair<FName, FString>(TEXT("Store"), TEXT("Einlagern")),
+				TPair<FName, FString>(TEXT("Inspect"), TEXT("Untersuchen"))
+			};
+		}
 
 		for (int32 Index = 0; Index < Actions.Num(); ++Index)
 		{
@@ -1272,6 +1323,7 @@ namespace
 			USurvivalHUDWidget::FContextActionHitBox HitBox;
 			HitBox.ActionId = Actions[Index].Key;
 			HitBox.SlotIndex = ContextSlotIndex;
+			HitBox.bWorldInventory = bContextWorldInventory;
 			HitBox.Bounds = FSlateRect(RowPosition.X, RowPosition.Y, RowPosition.X + RowSize.X, RowPosition.Y + RowSize.Y);
 			ContextActionHitBoxes.Add(HitBox);
 		}
@@ -1289,6 +1341,7 @@ namespace
 		FName SelectedItemId,
 		FName& SelectedRecipeId,
 		int32 ContextSlotIndex,
+		bool bContextWorldInventory,
 		const FVector2D& ContextMenuPosition,
 		const ASurvivalCharacter* SurvivalCharacter,
 		const FVector2D& ViewSize)
@@ -1304,6 +1357,8 @@ namespace
 
 		const UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
 		const UCraftingComponent* Crafting = SurvivalCharacter->CraftingComponent;
+		const ASurvivalPlayerController* Controller = Cast<ASurvivalPlayerController>(SurvivalCharacter->GetController());
+		const UInventoryComponent* WorldInventory = Controller ? Controller->GetOpenedWorldInventory() : nullptr;
 		const float PanelMarginX = FMath::Clamp(ViewSize.X * 0.045f, 38.0f, 72.0f);
 		const float PanelMarginY = FMath::Clamp(ViewSize.Y * 0.060f, 40.0f, 68.0f);
 		const FVector2D PanelPosition(PanelMarginX, PanelMarginY);
@@ -1344,9 +1399,24 @@ namespace
 		const FVector2D ToolsPosition(PanelPosition.X + PanelSize.X - Gap - ToolWidth, ContentTop);
 		const FVector2D BottomPosition(PanelPosition.X + Gap, PanelPosition.Y + PanelSize.Y - BottomHeight - Gap);
 
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 20, ItemHitBoxes, SlotHitBoxes, PackPosition, FVector2D(LeftWidth, ContentHeight), TEXT("Rucksack"), AllSlots, Crafting, HoveredItemId, SelectedItemId, false, false, Inventory->GetEquippedSlotIndex());
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 130, ItemHitBoxes, SlotHitBoxes, ToolsPosition, FVector2D(ToolWidth, ContentHeight), TEXT("Ausrustung"), ToolStacks, Crafting, HoveredItemId, SelectedItemId, true, false, Inventory->GetEquippedSlotIndex());
-		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 220, ItemHitBoxes, SlotHitBoxes, BottomPosition, FVector2D(PanelSize.X - Gap * 2.0f, BottomHeight), TEXT("Quickslots"), HotbarStacks, Crafting, HoveredItemId, SelectedItemId, true, true, Inventory->GetEquippedSlotIndex());
+		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 20, ItemHitBoxes, SlotHitBoxes, PackPosition, FVector2D(LeftWidth, ContentHeight), TEXT("Rucksack"), AllSlots, Crafting, HoveredItemId, SelectedItemId, false, false, false, Inventory->GetEquippedSlotIndex());
+		if (WorldInventory)
+		{
+			DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 130, ItemHitBoxes, SlotHitBoxes, ToolsPosition, FVector2D(ToolWidth, ContentHeight), TEXT("Container"), WorldInventory->GetSlots(), Crafting, HoveredItemId, SelectedItemId, false, false, true, INDEX_NONE);
+
+			if (const ACampfireActor* Campfire = Cast<ACampfireActor>(Controller ? Controller->GetOpenedWorldInventoryOwner() : nullptr))
+			{
+				const FString FireState = Campfire->bIsLit
+					? FString::Printf(TEXT("Feuer %.0fs"), Campfire->FuelSecondsRemaining)
+					: TEXT("Feuer aus");
+				DrawText(Geometry, OutDrawElements, LayerId + 140, FireState, ToolsPosition + FVector2D(18.0f, ContentHeight - 34.0f), Campfire->bIsLit ? FLinearColor(0.92f, 0.56f, 0.30f, 0.96f) : FLinearColor(0.62f, 0.60f, 0.52f, 0.84f), 11, true, ToolWidth - 36.0f);
+			}
+		}
+		else
+		{
+			DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 130, ItemHitBoxes, SlotHitBoxes, ToolsPosition, FVector2D(ToolWidth, ContentHeight), TEXT("Ausrustung"), ToolStacks, Crafting, HoveredItemId, SelectedItemId, true, false, false, Inventory->GetEquippedSlotIndex());
+		}
+		DrawInventoryGridSection(Geometry, OutDrawElements, LayerId + 220, ItemHitBoxes, SlotHitBoxes, BottomPosition, FVector2D(PanelSize.X - Gap * 2.0f, BottomHeight), TEXT("Quickslots"), HotbarStacks, Crafting, HoveredItemId, SelectedItemId, true, true, false, Inventory->GetEquippedSlotIndex());
 
 		DrawText(Geometry, OutDrawElements, LayerId + 222, FString::Printf(TEXT("%.1f / %.1f kg"), Inventory->GetCurrentWeightKg(), Inventory->GetMaxWeightKg()), BottomPosition + FVector2D(PanelSize.X - Gap * 2.0f - 116.0f, 14.0f), FLinearColor(0.70f, 0.68f, 0.58f, 0.86f), 11, true, 104.0f);
 
@@ -1393,7 +1463,7 @@ namespace
 
 		const FName TooltipItemId = !HoveredItemId.IsNone() ? HoveredItemId : SelectedItemId;
 		DrawInventoryTooltip(Geometry, OutDrawElements, LayerId + 820, ItemHitBoxes, Crafting, TooltipItemId, ViewSize);
-		DrawContextMenu(Geometry, OutDrawElements, LayerId + 850, ContextActionHitBoxes, ContextSlotIndex, ContextMenuPosition, Inventory, Crafting, ViewSize);
+		DrawContextMenu(Geometry, OutDrawElements, LayerId + 850, ContextActionHitBoxes, ContextSlotIndex, bContextWorldInventory, ContextMenuPosition, Inventory, WorldInventory, Crafting, ViewSize);
 	}
 
 	void DrawLargeMapOverlay(
@@ -1454,12 +1524,13 @@ int32 USurvivalHUDWidget::NativePaint(
 
 	if (Controller->IsInventoryOpen())
 	{
-		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, InventoryItemHitBoxes, SlotHitBoxes, ContextActionHitBoxes, HoveredItemId, SelectedItemId, SelectedRecipeId, ContextSlotIndex, ContextMenuPosition, SurvivalCharacter, ViewSize);
+		DrawInventoryOverlay(AllottedGeometry, OutDrawElements, CurrentLayer + 1, RecipeHitBoxes, InventoryItemHitBoxes, SlotHitBoxes, ContextActionHitBoxes, HoveredItemId, SelectedItemId, SelectedRecipeId, ContextSlotIndex, bContextFromWorldInventory, ContextMenuPosition, SurvivalCharacter, ViewSize);
 		return CurrentLayer + 900;
 	}
 
 	HoveredItemId = NAME_None;
 	ContextSlotIndex = INDEX_NONE;
+	bContextFromWorldInventory = false;
 
 	if (Controller->IsMapOpen())
 	{
@@ -1486,11 +1557,13 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton)
 	{
 		ContextSlotIndex = INDEX_NONE;
+		bContextFromWorldInventory = false;
 		for (const FInventoryItemHitBox& HitBox : InventoryItemHitBoxes)
 		{
 			if (!HitBox.bCraftingInput && ContainsPoint(HitBox.Bounds, LocalMousePosition))
 			{
 				ContextSlotIndex = HitBox.SlotIndex;
+				bContextFromWorldInventory = HitBox.bWorldInventory;
 				ContextMenuPosition = LocalMousePosition;
 				SelectedSlotIndex = HitBox.SlotIndex;
 				SelectedItemId = HitBox.ItemId;
@@ -1513,6 +1586,8 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		}
 
 		UInventoryComponent* Inventory = SurvivalCharacter->InventoryComponent;
+		UInventoryComponent* WorldInventory = Controller ? Controller->GetOpenedWorldInventory() : nullptr;
+		UInventoryComponent* SourceInventory = HitBox.bWorldInventory ? WorldInventory : Inventory;
 		if (HitBox.ActionId == TEXT("Use"))
 		{
 			Inventory->UseSlot(HitBox.SlotIndex);
@@ -1529,13 +1604,22 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 		{
 			Inventory->DropSlot(HitBox.SlotIndex);
 		}
+		else if (HitBox.ActionId == TEXT("Store") && WorldInventory)
+		{
+			Inventory->TransferSlotTo(WorldInventory, HitBox.SlotIndex, -1);
+		}
+		else if (HitBox.ActionId == TEXT("Take") && WorldInventory)
+		{
+			WorldInventory->TransferSlotTo(Inventory, HitBox.SlotIndex, -1);
+		}
 		else if (HitBox.ActionId == TEXT("Inspect"))
 		{
 			SelectedSlotIndex = HitBox.SlotIndex;
-			SelectedItemId = Inventory->GetSlot(HitBox.SlotIndex).ItemId;
+			SelectedItemId = SourceInventory ? SourceInventory->GetSlot(HitBox.SlotIndex).ItemId : NAME_None;
 		}
 
 		ContextSlotIndex = INDEX_NONE;
+		bContextFromWorldInventory = false;
 		return FReply::Handled();
 	}
 
@@ -1590,13 +1674,16 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, 
 			SelectedItemId = HitBox.ItemId;
 			SelectedSlotIndex = HitBox.SlotIndex;
 			ContextSlotIndex = INDEX_NONE;
+			bContextFromWorldInventory = false;
 			DraggedSlotIndex = HitBox.SlotIndex;
 			bDraggedFromCraftingInput = HitBox.bCraftingInput;
+			bDraggedFromWorldInventory = HitBox.bWorldInventory;
 			return FReply::Handled();
 		}
 	}
 
 	ContextSlotIndex = INDEX_NONE;
+	bContextFromWorldInventory = false;
 	return FReply::Handled();
 }
 
@@ -1611,8 +1698,10 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, co
 
 	const int32 ReleasedSlotIndex = DraggedSlotIndex;
 	const bool bReleasedFromCraftingInput = bDraggedFromCraftingInput;
+	const bool bReleasedFromWorldInventory = bDraggedFromWorldInventory;
 	DraggedSlotIndex = INDEX_NONE;
 	bDraggedFromCraftingInput = false;
+	bDraggedFromWorldInventory = false;
 
 	if (ReleasedSlotIndex == INDEX_NONE || !SurvivalCharacter)
 	{
@@ -1636,17 +1725,25 @@ FReply USurvivalHUDWidget::NativeOnMouseButtonUp(const FGeometry& InGeometry, co
 		}
 		else if (SurvivalCharacter->InventoryComponent)
 		{
-			if (HitBox.bHotbarSlot)
+			UInventoryComponent* PlayerInventory = SurvivalCharacter->InventoryComponent;
+			UInventoryComponent* WorldInventory = Controller ? Controller->GetOpenedWorldInventory() : nullptr;
+			UInventoryComponent* SourceInventory = bReleasedFromWorldInventory ? WorldInventory : PlayerInventory;
+			UInventoryComponent* TargetInventory = HitBox.bWorldInventory ? WorldInventory : PlayerInventory;
+			if (SourceInventory && TargetInventory && SourceInventory != TargetInventory && !HitBox.bCraftingInput && !HitBox.bHotbarSlot)
 			{
-				SurvivalCharacter->InventoryComponent->AssignSlotToHotbar(ReleasedSlotIndex, HitBox.HotbarIndex);
+				SourceInventory->TransferSlotTo(TargetInventory, ReleasedSlotIndex, -1);
 			}
-			else if (HitBox.bCraftingInput && SurvivalCharacter->CraftingComponent)
+			else if (!bReleasedFromWorldInventory && HitBox.bHotbarSlot)
+			{
+				PlayerInventory->AssignSlotToHotbar(ReleasedSlotIndex, HitBox.HotbarIndex);
+			}
+			else if (!bReleasedFromWorldInventory && HitBox.bCraftingInput && SurvivalCharacter->CraftingComponent)
 			{
 				SurvivalCharacter->CraftingComponent->AddInventorySlotToCrafting(ReleasedSlotIndex, -1);
 			}
-			else if (HitBox.SlotIndex != INDEX_NONE && HitBox.SlotIndex != ReleasedSlotIndex)
+			else if (!bReleasedFromWorldInventory && HitBox.SlotIndex != INDEX_NONE && HitBox.SlotIndex != ReleasedSlotIndex)
 			{
-				SurvivalCharacter->InventoryComponent->MoveStack(ReleasedSlotIndex, HitBox.SlotIndex);
+				PlayerInventory->MoveStack(ReleasedSlotIndex, HitBox.SlotIndex);
 			}
 		}
 
@@ -1685,5 +1782,6 @@ void USurvivalHUDWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 	HoveredItemId = NAME_None;
 	DraggedSlotIndex = INDEX_NONE;
 	bDraggedFromCraftingInput = false;
+	bDraggedFromWorldInventory = false;
 	Super::NativeOnMouseLeave(InMouseEvent);
 }

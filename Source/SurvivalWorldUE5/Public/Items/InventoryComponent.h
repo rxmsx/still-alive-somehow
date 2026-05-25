@@ -156,6 +156,9 @@ public:
 	bool SplitStackHalf(int32 FromSlotIndex);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool TransferSlotTo(UInventoryComponent* TargetInventory, int32 FromSlotIndex, int32 Count = -1);
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
 	bool DropSlot(int32 SlotIndex, int32 Count = -1);
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
@@ -187,6 +190,18 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetEquippedSlotIndex() const { return EquippedSlotIndex; }
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	FInventoryStack GetEquippedStack() const;
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool FindUsableTool(ESurvivalToolType ToolType, FInventoryStack& OutToolStack, int32& OutSlotIndex) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool DamageItemDurability(int32 SlotIndex, float Amount, bool bKeepBrokenItem = true);
+
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	bool IsSlotUsable(int32 SlotIndex) const;
 
 protected:
 	UPROPERTY(ReplicatedUsing = OnRep_InventoryState, VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")

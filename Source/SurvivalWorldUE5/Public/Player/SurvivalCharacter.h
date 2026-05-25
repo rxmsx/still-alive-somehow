@@ -5,6 +5,7 @@
 #include "SurvivalCharacter.generated.h"
 
 class UCameraComponent;
+class UBuildingComponent;
 class UCraftingComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -32,6 +33,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
 	TObjectPtr<UCraftingComponent> CraftingComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Building")
+	TObjectPtr<UBuildingComponent> BuildingComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Survival")
 	TObjectPtr<USurvivalStatsComponent> SurvivalStatsComponent;
@@ -66,6 +70,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	bool UseInteract();
 
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	bool GetFocusedInteractable(AActor*& OutInteractableActor, FHitResult& OutHitResult) const;
+
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	FText GetCurrentInteractionPrompt(bool& bCanInteract) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Interaction")
+	void SetInteractionFeedback(const FText& Message, float DurationSeconds = 2.0f);
+
+	UFUNCTION(BlueprintPure, Category = "Interaction")
+	FText GetInteractionFeedback() const;
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -79,6 +95,11 @@ protected:
 	void StartJump();
 	void StopJump();
 	void HandleInteractInput();
+	void HandleBuildModeInput();
+	void HandleBuildConfirmInput();
+	void HandleBuildRotateInput();
+	void HandleBuildNextInput();
+	void HandleBuildPreviousInput();
 
 	void MoveForward(float Value);
 	void MoveRight(float Value);
@@ -87,4 +108,9 @@ protected:
 	void AddStarterItems();
 	void RefreshMovementSpeed();
 	bool IsGameplayInputBlocked() const;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Interaction")
+	FText InteractionFeedbackMessage;
+
+	float InteractionFeedbackExpiresAt = 0.0f;
 };

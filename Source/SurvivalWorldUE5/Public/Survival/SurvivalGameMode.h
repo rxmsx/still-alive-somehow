@@ -11,4 +11,10 @@ class SURVIVALWORLDUE5_API ASurvivalGameMode : public AGameModeBase
 
 public:
 	ASurvivalGameMode();
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
+	bool bSpawnMilestoneTestContent = true;
+
+protected:
+	virtual void BeginPlay() override;
 };

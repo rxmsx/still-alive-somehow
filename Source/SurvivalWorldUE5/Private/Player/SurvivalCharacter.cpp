@@ -1,4 +1,5 @@
 #include "Player/SurvivalCharacter.h"
+#include "Building/BuildingComponent.h"
 #include "Crafting/CraftingComponent.h"
 #include "EnhancedInputComponent.h"
 #include "Interfaces/Interactable.h"
@@ -25,6 +26,7 @@ ASurvivalCharacter::ASurvivalCharacter()
 
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
 	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("Crafting"));
+	BuildingComponent = CreateDefaultSubobject<UBuildingComponent>(TEXT("Building"));
 	SurvivalStatsComponent = CreateDefaultSubobject<USurvivalStatsComponent>(TEXT("SurvivalStats"));
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
@@ -98,11 +100,40 @@ void ASurvivalCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Pressed, this, &ASurvivalCharacter::StartSprint);
 	PlayerInputComponent->BindAction(TEXT("Sprint"), IE_Released, this, &ASurvivalCharacter::StopSprint);
 	PlayerInputComponent->BindAction(TEXT("Interact"), IE_Pressed, this, &ASurvivalCharacter::HandleInteractInput);
+	PlayerInputComponent->BindAction(TEXT("BuildMode"), IE_Pressed, this, &ASurvivalCharacter::HandleBuildModeInput);
+	PlayerInputComponent->BindAction(TEXT("PlaceBuildPart"), IE_Pressed, this, &ASurvivalCharacter::HandleBuildConfirmInput);
+	PlayerInputComponent->BindAction(TEXT("RotateBuildPreview"), IE_Pressed, this, &ASurvivalCharacter::HandleBuildRotateInput);
+	PlayerInputComponent->BindAction(TEXT("NextBuildPart"), IE_Pressed, this, &ASurvivalCharacter::HandleBuildNextInput);
+	PlayerInputComponent->BindAction(TEXT("PreviousBuildPart"), IE_Pressed, this, &ASurvivalCharacter::HandleBuildPreviousInput);
 }
 
 bool ASurvivalCharacter::UseInteract()
 {
-	if (!FirstPersonCamera)
+	AActor* HitActor = nullptr;
+	FHitResult HitResult;
+	if (!GetFocusedInteractable(HitActor, HitResult))
+	{
+		return false;
+	}
+
+	if (!IInteractable::Execute_CanInteract(HitActor, this))
+	{
+		SetInteractionFeedback(IInteractable::Execute_GetInteractionPrompt(HitActor, this));
+		return false;
+	}
+
+	const bool bInteracted = IInteractable::Execute_Interact(HitActor, this);
+	if (!bInteracted)
+	{
+		SetInteractionFeedback(NSLOCTEXT("SurvivalWorld", "InteractionFailed", "Aktion nicht moeglich."));
+	}
+	return bInteracted;
+}
+
+bool ASurvivalCharacter::GetFocusedInteractable(AActor*& OutInteractableActor, FHitResult& OutHitResult) const
+{
+	OutInteractableActor = nullptr;
+	if (!FirstPersonCamera || !GetWorld())
 	{
 		return false;
 	}
@@ -111,24 +142,48 @@ bool ASurvivalCharacter::UseInteract()
 	const FVector TraceEnd = TraceStart + FirstPersonCamera->GetForwardVector() * InteractionRange;
 
 	FCollisionQueryParams QueryParams(SCENE_QUERY_STAT(SurvivalInteractTrace), false, this);
-	FHitResult HitResult;
-	if (!GetWorld() || !GetWorld()->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
+	if (!GetWorld()->LineTraceSingleByChannel(OutHitResult, TraceStart, TraceEnd, ECC_Visibility, QueryParams))
 	{
 		return false;
 	}
 
-	AActor* HitActor = HitResult.GetActor();
+	AActor* HitActor = OutHitResult.GetActor();
 	if (!HitActor || !HitActor->GetClass()->ImplementsInterface(UInteractable::StaticClass()))
 	{
 		return false;
 	}
 
-	if (!IInteractable::Execute_CanInteract(HitActor, this))
+	OutInteractableActor = HitActor;
+	return true;
+}
+
+FText ASurvivalCharacter::GetCurrentInteractionPrompt(bool& bCanInteract) const
+{
+	bCanInteract = false;
+	AActor* HitActor = nullptr;
+	FHitResult HitResult;
+	if (!GetFocusedInteractable(HitActor, HitResult))
 	{
-		return false;
+		return FText::GetEmpty();
 	}
 
-	return IInteractable::Execute_Interact(HitActor, this);
+	bCanInteract = IInteractable::Execute_CanInteract(HitActor, this);
+	return IInteractable::Execute_GetInteractionPrompt(HitActor, this);
+}
+
+void ASurvivalCharacter::SetInteractionFeedback(const FText& Message, float DurationSeconds)
+{
+	InteractionFeedbackMessage = Message;
+	InteractionFeedbackExpiresAt = GetWorld() ? GetWorld()->GetTimeSeconds() + FMath::Max(0.1f, DurationSeconds) : 0.0f;
+}
+
+FText ASurvivalCharacter::GetInteractionFeedback() const
+{
+	if (!GetWorld() || InteractionFeedbackMessage.IsEmpty() || GetWorld()->GetTimeSeconds() > InteractionFeedbackExpiresAt)
+	{
+		return FText::GetEmpty();
+	}
+	return InteractionFeedbackMessage;
 }
 
 void ASurvivalCharacter::Move(const FInputActionValue& Value)
@@ -194,7 +249,66 @@ void ASurvivalCharacter::HandleInteractInput()
 		return;
 	}
 
+	if (BuildingComponent && BuildingComponent->IsBuildModeActive())
+	{
+		HandleBuildConfirmInput();
+		return;
+	}
+
 	UseInteract();
+}
+
+void ASurvivalCharacter::HandleBuildModeInput()
+{
+	if (IsGameplayInputBlocked() || !BuildingComponent)
+	{
+		return;
+	}
+
+	BuildingComponent->ToggleBuildMode();
+}
+
+void ASurvivalCharacter::HandleBuildConfirmInput()
+{
+	if (IsGameplayInputBlocked() || !BuildingComponent || !BuildingComponent->IsBuildModeActive())
+	{
+		return;
+	}
+
+	if (!BuildingComponent->ConfirmPlacement())
+	{
+		SetInteractionFeedback(BuildingComponent->GetPlacementMessage());
+	}
+}
+
+void ASurvivalCharacter::HandleBuildRotateInput()
+{
+	if (IsGameplayInputBlocked() || !BuildingComponent || !BuildingComponent->IsBuildModeActive())
+	{
+		return;
+	}
+
+	BuildingComponent->RotatePreview(1.0f);
+}
+
+void ASurvivalCharacter::HandleBuildNextInput()
+{
+	if (IsGameplayInputBlocked() || !BuildingComponent || !BuildingComponent->IsBuildModeActive())
+	{
+		return;
+	}
+
+	BuildingComponent->CycleBuildPart(1);
+}
+
+void ASurvivalCharacter::HandleBuildPreviousInput()
+{
+	if (IsGameplayInputBlocked() || !BuildingComponent || !BuildingComponent->IsBuildModeActive())
+	{
+		return;
+	}
+
+	BuildingComponent->CycleBuildPart(-1);
 }
 
 void ASurvivalCharacter::MoveForward(float Value)

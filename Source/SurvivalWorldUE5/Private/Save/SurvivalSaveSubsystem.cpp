@@ -1,8 +1,13 @@
 #include "Save/SurvivalSaveSubsystem.h"
 #include "Save/SurvivalSaveGame.h"
+#include "Building/BuildableActor.h"
+#include "Building/CampfireActor.h"
+#include "Building/StorageContainerActor.h"
+#include "Building/SurvivalBuildTypes.h"
 #include "Items/InventoryComponent.h"
 #include "Resources/ResourceNodeActor.h"
 #include "Resources/ResourceNodeComponent.h"
+#include "Survival/SurvivalStatsComponent.h"
 #include "World/WorldSeedSubsystem.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
@@ -46,6 +51,18 @@ bool USurvivalSaveSubsystem::SaveCurrentWorld(const FString& SlotName, int32 Use
 				SaveGame->HotbarSlotSnapshot = Inventory->GetHotbarSnapshot();
 				SaveGame->EquippedSlotIndex = Inventory->GetEquippedSlotIndex();
 			}
+			if (const USurvivalStatsComponent* Stats = Pawn->FindComponentByClass<USurvivalStatsComponent>())
+			{
+				SaveGame->PlayerStats.Health = Stats->Health;
+				SaveGame->PlayerStats.Hunger = Stats->Hunger;
+				SaveGame->PlayerStats.Thirst = Stats->Thirst;
+				SaveGame->PlayerStats.Stamina = Stats->Stamina;
+				SaveGame->PlayerStats.TemperatureCelsius = Stats->TemperatureCelsius;
+				SaveGame->PlayerStats.Fatigue = Stats->Fatigue;
+				SaveGame->PlayerStats.Disease = Stats->Disease;
+				SaveGame->PlayerStats.Bleeding = Stats->Bleeding;
+				SaveGame->PlayerStats.Poison = Stats->Poison;
+			}
 		}
 	}
 
@@ -62,6 +79,40 @@ bool USurvivalSaveSubsystem::SaveCurrentWorld(const FString& SlotName, int32 Use
 		State.StableResourceId = NodeComponent->StableResourceId;
 		State.RemainingHarvests = NodeComponent->RemainingHarvests;
 		SaveGame->ResourceNodes.Add(State);
+	}
+
+	for (TActorIterator<ABuildableActor> It(World); It; ++It)
+	{
+		const ABuildableActor* Buildable = *It;
+		if (!Buildable || Buildable->bIsPreviewActor || !Buildable->bWasPlacedByPlayer || Buildable->PartId.IsNone())
+		{
+			continue;
+		}
+
+		FBuildableActorSaveState State;
+		State.PartId = Buildable->PartId;
+		State.StableBuildId = Buildable->StableBuildId;
+		State.Transform = Buildable->GetActorTransform();
+
+		if (const AStorageContainerActor* Storage = Cast<AStorageContainerActor>(Buildable))
+		{
+			if (Storage->StorageInventory)
+			{
+				State.InventorySlotSnapshot = Storage->StorageInventory->GetSlotSnapshot();
+			}
+		}
+		if (const ACampfireActor* Campfire = Cast<ACampfireActor>(Buildable))
+		{
+			if (Campfire->CampfireInventory)
+			{
+				State.InventorySlotSnapshot = Campfire->CampfireInventory->GetSlotSnapshot();
+			}
+			State.bCampfireLit = Campfire->bIsLit;
+			State.CampfireFuelSeconds = Campfire->FuelSecondsRemaining;
+			State.CampfireCookSeconds = Campfire->CurrentCookSeconds;
+		}
+
+		SaveGame->BuiltActors.Add(State);
 	}
 
 	LastLoadedSave = SaveGame;
@@ -108,6 +159,19 @@ bool USurvivalSaveSubsystem::LoadCurrentWorld(const FString& SlotName, int32 Use
 					Inventory->SetSnapshot(LastLoadedSave->InventorySnapshot);
 				}
 			}
+			if (USurvivalStatsComponent* Stats = Pawn->FindComponentByClass<USurvivalStatsComponent>())
+			{
+				Stats->Health = LastLoadedSave->PlayerStats.Health;
+				Stats->Hunger = LastLoadedSave->PlayerStats.Hunger;
+				Stats->Thirst = LastLoadedSave->PlayerStats.Thirst;
+				Stats->Stamina = LastLoadedSave->PlayerStats.Stamina;
+				Stats->TemperatureCelsius = LastLoadedSave->PlayerStats.TemperatureCelsius;
+				Stats->Fatigue = LastLoadedSave->PlayerStats.Fatigue;
+				Stats->Disease = LastLoadedSave->PlayerStats.Disease;
+				Stats->Bleeding = LastLoadedSave->PlayerStats.Bleeding;
+				Stats->Poison = LastLoadedSave->PlayerStats.Poison;
+				Stats->ApplyHealthDelta(0.0f);
+			}
 		}
 	}
 
@@ -129,6 +193,53 @@ bool USurvivalSaveSubsystem::LoadCurrentWorld(const FString& SlotName, int32 Use
 		if (const int32* RemainingHarvests = ResourceStateById.Find(NodeComponent->StableResourceId))
 		{
 			NodeComponent->SetRemainingHarvests(*RemainingHarvests);
+		}
+	}
+
+	for (TActorIterator<ABuildableActor> It(World); It; ++It)
+	{
+		ABuildableActor* Buildable = *It;
+		if (Buildable && Buildable->bWasPlacedByPlayer)
+		{
+			Buildable->Destroy();
+		}
+	}
+
+	for (const FBuildableActorSaveState& State : LastLoadedSave->BuiltActors)
+	{
+		const FSurvivalBuildPartDef* BuildPart = USurvivalBuildCatalog::FindDefaultBuildPart(State.PartId);
+		if (!BuildPart)
+		{
+			continue;
+		}
+
+		const TSubclassOf<ABuildableActor> ActorClass = BuildPart->BuildActorClass ? BuildPart->BuildActorClass.Get() : ABuildableActor::StaticClass();
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+		ABuildableActor* Buildable = World->SpawnActor<ABuildableActor>(ActorClass, State.Transform, SpawnParams);
+		if (!Buildable)
+		{
+			continue;
+		}
+
+		Buildable->InitializeBuildable(State.PartId, nullptr, true);
+		Buildable->StableBuildId = State.StableBuildId;
+		Buildable->SetPreviewState(false, true);
+
+		if (AStorageContainerActor* Storage = Cast<AStorageContainerActor>(Buildable))
+		{
+			if (Storage->StorageInventory)
+			{
+				Storage->StorageInventory->SetSlotSnapshot(State.InventorySlotSnapshot, TArray<int32>(), INDEX_NONE);
+			}
+		}
+		if (ACampfireActor* Campfire = Cast<ACampfireActor>(Buildable))
+		{
+			if (Campfire->CampfireInventory)
+			{
+				Campfire->CampfireInventory->SetSlotSnapshot(State.InventorySlotSnapshot, TArray<int32>(), INDEX_NONE);
+			}
+			Campfire->SetCampfireState(State.bCampfireLit, State.CampfireFuelSeconds, State.CampfireCookSeconds);
 		}
 	}
 

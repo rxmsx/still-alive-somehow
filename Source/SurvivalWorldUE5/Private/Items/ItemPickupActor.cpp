@@ -24,11 +24,11 @@ AItemPickupActor::AItemPickupActor()
 	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MeshComponent->SetRelativeScale3D(FVector(0.8f));
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultPickupMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> DefaultPickupMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	if (DefaultPickupMesh.Succeeded())
 	{
 		MeshComponent->SetStaticMesh(DefaultPickupMesh.Object);
-		MeshComponent->SetRelativeScale3D(FVector(0.18f, 0.18f, 0.08f));
+		MeshComponent->SetRelativeScale3D(FVector(0.22f, 0.18f, 0.12f));
 	}
 }
 
@@ -58,7 +58,16 @@ FText AItemPickupActor::GetInteractionPrompt_Implementation(const AActor* Intera
 {
 	const FItemDef* ItemDef = ResolveItemDefinition();
 	const FText ItemName = ItemDef && !ItemDef->DisplayName.IsEmpty() ? ItemDef->DisplayName : FText::FromName(ItemId);
-	return FText::Format(NSLOCTEXT("SurvivalWorld", "PickupItemPrompt", "Take {0} x{1}"), ItemName, Count);
+	if (const UInventoryComponent* Inventory = InteractingActor ? InteractingActor->FindComponentByClass<UInventoryComponent>() : nullptr)
+	{
+		if (!Inventory->CanAddItem(ItemId, Count))
+		{
+			return NSLOCTEXT("SurvivalWorld", "PickupInventoryFullPrompt", "Inventar voll");
+		}
+	}
+	return Count > 1
+		? FText::Format(NSLOCTEXT("SurvivalWorld", "PickupItemPromptCount", "Aufheben {0} x{1}"), ItemName, Count)
+		: FText::Format(NSLOCTEXT("SurvivalWorld", "PickupItemPrompt", "Aufheben {0}"), ItemName);
 }
 
 bool AItemPickupActor::CanInteract_Implementation(const AActor* InteractingActor) const

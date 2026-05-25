@@ -319,6 +319,28 @@ bool UInventoryComponent::SplitStackHalf(int32 FromSlotIndex)
 	return SplitStack(FromSlotIndex, EmptySlot, ReplicatedStacks[FromSlotIndex].Count / 2);
 }
 
+bool UInventoryComponent::TransferSlotTo(UInventoryComponent* TargetInventory, int32 FromSlotIndex, int32 Count)
+{
+	if (!TargetInventory || TargetInventory == this || !IsValidInventorySlot(FromSlotIndex) || ReplicatedStacks[FromSlotIndex].IsEmpty())
+	{
+		return false;
+	}
+
+	const FInventoryStack SourceStack = ReplicatedStacks[FromSlotIndex];
+	const int32 TransferCount = Count <= 0 ? SourceStack.Count : FMath::Min(Count, SourceStack.Count);
+	if (TransferCount <= 0)
+	{
+		return false;
+	}
+
+	if (!TargetInventory->AddItemWithState(SourceStack.ItemId, TransferCount, SourceStack.Durability, SourceStack.Freshness))
+	{
+		return false;
+	}
+
+	return RemoveFromSlot(FromSlotIndex, TransferCount);
+}
+
 bool UInventoryComponent::DropSlot(int32 SlotIndex, int32 Count)
 {
 	if (!IsValidInventorySlot(SlotIndex) || ReplicatedStacks[SlotIndex].IsEmpty())
@@ -358,6 +380,11 @@ bool UInventoryComponent::UseSlot(int32 SlotIndex)
 		return false;
 	}
 
+	if (ItemDef->bHasDurability && Slot.Durability <= 0.0f)
+	{
+		return false;
+	}
+
 	if (ItemDef->UseType == ESurvivalItemUseType::Equip || ItemDef->bEquippable)
 	{
 		return EquipSlot(SlotIndex);
@@ -389,11 +416,7 @@ bool UInventoryComponent::UseSlot(int32 SlotIndex)
 
 	if (ItemDef->bHasDurability)
 	{
-		Slot.Durability = FMath::Max(0.0f, Slot.Durability - 1.0f);
-		if (Slot.Durability <= 0.0f)
-		{
-			Slot = FInventoryStack();
-		}
+		DamageItemDurability(SlotIndex, ItemDef->DurabilityLossPerUse, true);
 	}
 
 	SanitizeSlotIndices();
@@ -401,6 +424,96 @@ bool UInventoryComponent::UseSlot(int32 SlotIndex)
 	OnItemUsed.Broadcast(ItemDef->ItemId, 1, SlotIndex);
 	BroadcastInventoryChanged();
 	return true;
+}
+
+FInventoryStack UInventoryComponent::GetEquippedStack() const
+{
+	return GetSlot(EquippedSlotIndex);
+}
+
+bool UInventoryComponent::FindUsableTool(ESurvivalToolType ToolType, FInventoryStack& OutToolStack, int32& OutSlotIndex) const
+{
+	OutToolStack = FInventoryStack();
+	OutSlotIndex = INDEX_NONE;
+
+	if (ToolType == ESurvivalToolType::None || ToolType == ESurvivalToolType::Hand)
+	{
+		return false;
+	}
+
+	auto MatchesTool = [this, ToolType](const FInventoryStack& Stack)
+	{
+		if (Stack.IsEmpty())
+		{
+			return false;
+		}
+
+		const FItemDef* ItemDef = ResolveItemDefinition(Stack.ItemId);
+		if (!ItemDef || !ItemDef->bIsTool || ItemDef->ToolType != ToolType)
+		{
+			return false;
+		}
+
+		return !ItemDef->bHasDurability || Stack.Durability > 0.0f;
+	};
+
+	const FInventoryStack EquippedStack = GetEquippedStack();
+	if (MatchesTool(EquippedStack))
+	{
+		OutToolStack = EquippedStack;
+		OutSlotIndex = EquippedStack.SlotIndex;
+		return true;
+	}
+
+	for (const FInventoryStack& Stack : ReplicatedStacks)
+	{
+		if (MatchesTool(Stack))
+		{
+			OutToolStack = Stack;
+			OutSlotIndex = Stack.SlotIndex;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool UInventoryComponent::DamageItemDurability(int32 SlotIndex, float Amount, bool bKeepBrokenItem)
+{
+	if (!IsValidInventorySlot(SlotIndex) || ReplicatedStacks[SlotIndex].IsEmpty() || Amount <= 0.0f)
+	{
+		return false;
+	}
+
+	FInventoryStack& Slot = ReplicatedStacks[SlotIndex];
+	const FItemDef* ItemDef = ResolveItemDefinition(Slot.ItemId);
+	if (!ItemDef || !ItemDef->bHasDurability)
+	{
+		return true;
+	}
+
+	Slot.Durability = FMath::Max(0.0f, Slot.Durability - Amount);
+	if (Slot.Durability <= 0.0f && !bKeepBrokenItem)
+	{
+		Slot = FInventoryStack();
+	}
+
+	SanitizeSlotIndices();
+	RefreshCachedCounts();
+	BroadcastInventoryChanged();
+	return true;
+}
+
+bool UInventoryComponent::IsSlotUsable(int32 SlotIndex) const
+{
+	if (!IsValidInventorySlot(SlotIndex) || ReplicatedStacks[SlotIndex].IsEmpty())
+	{
+		return false;
+	}
+
+	const FInventoryStack& Slot = ReplicatedStacks[SlotIndex];
+	const FItemDef* ItemDef = ResolveItemDefinition(Slot.ItemId);
+	return !ItemDef || !ItemDef->bHasDurability || Slot.Durability > 0.0f;
 }
 
 bool UInventoryComponent::UseItem(FName ItemId)
