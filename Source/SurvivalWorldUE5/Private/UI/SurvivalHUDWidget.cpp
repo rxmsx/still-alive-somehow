@@ -13,6 +13,7 @@
 #include "Rendering/DrawElements.h"
 #include "Engine/Texture2D.h"
 #include "Styling/CoreStyle.h"
+#include "UObject/UObjectGlobals.h"
 
 namespace
 {
@@ -45,6 +46,41 @@ namespace
 	bool ContainsPoint(const FSlateRect& Rect, const FVector2D& Point)
 	{
 		return Point.X >= Rect.Left && Point.X <= Rect.Right && Point.Y >= Rect.Top && Point.Y <= Rect.Bottom;
+	}
+
+	UTexture2D* LoadItemTextureFromPath(FName AssetIconPath)
+	{
+		if (AssetIconPath.IsNone())
+		{
+			return nullptr;
+		}
+
+		static TMap<FName, TWeakObjectPtr<UTexture2D>> CachedTextures;
+		if (const TWeakObjectPtr<UTexture2D>* CachedTexture = CachedTextures.Find(AssetIconPath))
+		{
+			if (CachedTexture->IsValid())
+			{
+				return CachedTexture->Get();
+			}
+		}
+
+		FString TexturePath = AssetIconPath.ToString();
+		if (!TexturePath.Contains(TEXT(".")))
+		{
+			FString AssetName;
+			TexturePath.Split(TEXT("/"), nullptr, &AssetName, ESearchCase::IgnoreCase, ESearchDir::FromEnd);
+			if (!AssetName.IsEmpty())
+			{
+				TexturePath = FString::Printf(TEXT("%s.%s"), *TexturePath, *AssetName);
+			}
+		}
+
+		UTexture2D* LoadedTexture = Cast<UTexture2D>(StaticLoadObject(UTexture2D::StaticClass(), nullptr, *TexturePath));
+		if (LoadedTexture)
+		{
+			CachedTextures.Add(AssetIconPath, LoadedTexture);
+		}
+		return LoadedTexture;
 	}
 
 	void DrawBox(
@@ -611,6 +647,10 @@ namespace
 		if (Crafting && Crafting->GetItemDefinition(Stack.ItemId, ItemDef))
 		{
 			ItemTexture = ItemDef.InventoryImage ? ItemDef.InventoryImage.Get() : ItemDef.Icon.Get();
+			if (!ItemTexture)
+			{
+				ItemTexture = LoadItemTextureFromPath(ItemDef.AssetIconPath);
+			}
 		}
 
 		if (ItemTexture)
