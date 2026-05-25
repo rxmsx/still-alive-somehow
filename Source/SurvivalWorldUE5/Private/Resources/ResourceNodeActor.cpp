@@ -43,12 +43,11 @@ FText AResourceNodeActor::GetInteractionPrompt_Implementation(const AActor* Inte
 		return NSLOCTEXT("SurvivalWorld", "ResourceDepleted", "Depleted");
 	}
 
-	if (!ResourceNodeComponent->RequiredToolItemId.IsNone())
+	if (ResourceNodeComponent->RequiredToolType != ESurvivalToolType::None)
 	{
 		return FText::Format(
-			NSLOCTEXT("SurvivalWorld", "HarvestResourceWithTool", "Harvest {0} with {1}"),
-			FText::FromName(ResourceNodeComponent->OutputItemId),
-			FText::FromName(ResourceNodeComponent->RequiredToolItemId));
+			NSLOCTEXT("SurvivalWorld", "HarvestResourceWithTool", "E Abbauen {0} (Werkzeug noetig)"),
+			FText::FromName(ResourceNodeComponent->OutputItemId));
 	}
 
 	return FText::Format(

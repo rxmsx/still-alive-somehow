@@ -91,6 +91,11 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 			Item.bEquippable = bEquippable;
 			Item.bHotbarAllowed = bHotbarAllowed;
 			Item.bIsTool = UseType == ESurvivalItemUseType::UseTool || bEquippable;
+			if (!Item.bIsTool)
+			{
+				Item.ToolType = ESurvivalToolType::None;
+				Item.HarvestEfficiency = 0.0f;
+			}
 		};
 
 		AddItem(TEXT("Wood"), NSLOCTEXT("SurvivalWorld", "ItemWoodLog", "Holzscheit"), NSLOCTEXT("SurvivalWorld", "ItemWoodLogDescription", "Trockenes, raues Holz fuer Feuer, Reparaturen und einfache Konstruktionen."), ESurvivalItemCategory::Resource, 30, 0.85f, ESurvivalItemRarity::Common, 100);
@@ -141,6 +146,8 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		const int32 StoneAxeIndex = AddItem(TEXT("StoneAxe"), NSLOCTEXT("SurvivalWorld", "ItemStoneAxe", "Steinaxt"), NSLOCTEXT("SurvivalWorld", "ItemStoneAxeDescription", "Eine einfache Axt mit Steinblatt und Faserbindung."), ESurvivalItemCategory::Tool, 1, 1.10f, ESurvivalItemRarity::Common, 410);
 		ConfigureDurability(StoneAxeIndex, 70.0f);
 		ConfigureUse(StoneAxeIndex, ESurvivalItemUseType::UseTool, true);
+		Items[StoneAxeIndex].ToolType = ESurvivalToolType::Axe;
+		Items[StoneAxeIndex].HarvestEfficiency = 1.0f;
 
 		const int32 SharpenedStoneIndex = AddItem(TEXT("SharpenedStone"), NSLOCTEXT("SurvivalWorld", "ItemSharpenedStone", "Geschaerfter Stein"), NSLOCTEXT("SurvivalWorld", "ItemSharpenedStoneDescription", "Eine scharfe Steinkante zum Schneiden und Kratzen."), ESurvivalItemCategory::Tool, 1, 0.38f, ESurvivalItemRarity::Common, 420);
 		ConfigureDurability(SharpenedStoneIndex, 25.0f);
@@ -149,6 +156,8 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		const int32 TorchIndex = AddItem(TEXT("Torch"), NSLOCTEXT("SurvivalWorld", "ItemTorch", "Fackel"), NSLOCTEXT("SurvivalWorld", "ItemTorchDescription", "Eine primitive Lichtquelle aus Holz und trockener Faser."), ESurvivalItemCategory::Tool, 1, 0.55f, ESurvivalItemRarity::Common, 430);
 		ConfigureDurability(TorchIndex, 120.0f);
 		ConfigureUse(TorchIndex, ESurvivalItemUseType::UseTool, true);
+		Items[TorchIndex].ToolType = ESurvivalToolType::Hand;
+		Items[TorchIndex].HarvestEfficiency = 0.2f;
 
 		const int32 SpearIndex = AddItem(TEXT("Spear"), NSLOCTEXT("SurvivalWorld", "ItemSpear", "Speer"), NSLOCTEXT("SurvivalWorld", "ItemSpearDescription", "Ein gebundener Holzspeer fuer Jagd und Verteidigung."), ESurvivalItemCategory::Weapon, 1, 1.25f, ESurvivalItemRarity::Common, 500);
 		ConfigureDurability(SpearIndex, 80.0f);
@@ -157,10 +166,14 @@ const TArray<FItemDef>& USurvivalItemCatalog::GetDefaultItems()
 		const int32 AxeIndex = AddItem(TEXT("Axe"), NSLOCTEXT("SurvivalWorld", "ItemAxe", "Axt"), NSLOCTEXT("SurvivalWorld", "ItemAxeDescription", "Eine abgenutzte Axt mit Stahlkopf fuer Holz und leichte Hindernisse."), ESurvivalItemCategory::Tool, 1, 1.45f, ESurvivalItemRarity::Uncommon, 510);
 		ConfigureDurability(AxeIndex, 120.0f);
 		ConfigureUse(AxeIndex, ESurvivalItemUseType::UseTool, true);
+		Items[AxeIndex].ToolType = ESurvivalToolType::Axe;
+		Items[AxeIndex].HarvestEfficiency = 1.25f;
 
 		const int32 PickaxeIndex = AddItem(TEXT("Pickaxe"), NSLOCTEXT("SurvivalWorld", "ItemPickaxe", "Spitzhacke"), NSLOCTEXT("SurvivalWorld", "ItemPickaxeDescription", "Schweres Werkzeug fuer Stein, Erz und harte Hindernisse."), ESurvivalItemCategory::Tool, 1, 2.10f, ESurvivalItemRarity::Uncommon, 520);
 		ConfigureDurability(PickaxeIndex, 140.0f);
 		ConfigureUse(PickaxeIndex, ESurvivalItemUseType::UseTool, true);
+		Items[PickaxeIndex].ToolType = ESurvivalToolType::Pickaxe;
+		Items[PickaxeIndex].HarvestEfficiency = 1.1f;
 
 		const int32 CampfireIndex = AddItem(TEXT("Campfire"), NSLOCTEXT("SurvivalWorld", "ItemCampfire", "Lagerfeuer"), NSLOCTEXT("SurvivalWorld", "ItemCampfireDescription", "Eine einfache Feuerstelle zum Kochen, Trocknen und Reinigen von Wasser."), ESurvivalItemCategory::Building, 1, 3.0f, ESurvivalItemRarity::Common, 600);
 		ConfigureUse(CampfireIndex, ESurvivalItemUseType::PlaceWorldObject, false, false);

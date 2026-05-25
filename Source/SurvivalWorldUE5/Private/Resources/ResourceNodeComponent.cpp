@@ -1,5 +1,7 @@
 #include "Resources/ResourceNodeComponent.h"
 #include "Items/InventoryComponent.h"
+#include "Items/ItemPickupActor.h"
+#include "Player/SurvivalCharacter.h"
 #include "World/WorldSeedSubsystem.h"
 #include "GameFramework/Actor.h"
 #include "Net/UnrealNetwork.h"
@@ -40,13 +42,20 @@ bool UResourceNodeComponent::CanHarvest(const AActor* HarvestingActor) const
 		return false;
 	}
 
-	if (RequiredToolItemId.IsNone())
+	if (RequiredToolType == ESurvivalToolType::None)
 	{
 		return true;
 	}
 
 	const UInventoryComponent* Inventory = HarvestingActor->FindComponentByClass<UInventoryComponent>();
-	return Inventory && Inventory->HasItem(RequiredToolItemId);
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	float Efficiency = 0.0f;
+	FName ToolItemId;
+	return const_cast<UInventoryComponent*>(Inventory)->DamageEquippedTool(0.0f, RequiredToolType, bRequireMatchingTool, Efficiency, ToolItemId);
 }
 
 bool UResourceNodeComponent::Harvest(AActor* HarvestingActor, FName& OutItemId, int32& OutAmount)
@@ -60,14 +69,38 @@ bool UResourceNodeComponent::Harvest(AActor* HarvestingActor, FName& OutItemId, 
 	}
 
 	UInventoryComponent* Inventory = HarvestingActor->FindComponentByClass<UInventoryComponent>();
-	if (!Inventory || !Inventory->AddItem(OutputItemId, AmountPerHarvest))
+	if (!Inventory)
 	{
 		return false;
 	}
 
+	float Efficiency = 1.0f;
+	FName ToolItemId;
+	if (!Inventory->DamageEquippedTool(1.0f, RequiredToolType, bRequireMatchingTool, Efficiency, ToolItemId))
+	{
+		return false;
+	}
+
+	const float Penalty = (RequiredToolType == ESurvivalToolType::None || ToolItemId != NAME_None) ? 1.0f : 0.35f;
+	const int32 EffectiveAmount = FMath::Max(1, FMath::RoundToInt(static_cast<float>(AmountPerHarvest) * FMath::Max(0.1f, Efficiency) * Penalty));
+	if (!Inventory->AddItem(OutputItemId, EffectiveAmount))
+	{
+		return false;
+	}
+
+	if (LootTable.Num() > 0)
+	{
+		for (const FResourceDropEntry& Drop : LootTable)
+		{
+			if (Drop.ItemId.IsNone()) continue;
+			const int32 C = FMath::RandRange(Drop.MinCount, FMath::Max(Drop.MinCount, Drop.MaxCount));
+			Inventory->AddItem(Drop.ItemId, C);
+		}
+	}
+
 	RemainingHarvests = FMath::Max(0, RemainingHarvests - 1);
 	OutItemId = OutputItemId;
-	OutAmount = AmountPerHarvest;
+	OutAmount = EffectiveAmount;
 	OnResourceHarvested.Broadcast(RemainingHarvests);
 	return true;
 }
@@ -89,7 +122,9 @@ void UResourceNodeComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 
 	DOREPLIFETIME(UResourceNodeComponent, StableResourceId);
 	DOREPLIFETIME(UResourceNodeComponent, OutputItemId);
-	DOREPLIFETIME(UResourceNodeComponent, RequiredToolItemId);
+	DOREPLIFETIME(UResourceNodeComponent, RequiredToolType);
+	DOREPLIFETIME(UResourceNodeComponent, bRequireMatchingTool);
+	DOREPLIFETIME(UResourceNodeComponent, LootTable);
 	DOREPLIFETIME(UResourceNodeComponent, AmountPerHarvest);
 	DOREPLIFETIME(UResourceNodeComponent, MaxHarvests);
 	DOREPLIFETIME(UResourceNodeComponent, RemainingHarvests);

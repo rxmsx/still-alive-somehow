@@ -2,9 +2,25 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Items/SurvivalItemTypes.h"
 #include "ResourceNodeComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnResourceHarvested, int32, RemainingHarvests);
+
+USTRUCT(BlueprintType)
+struct SURVIVALWORLDUE5_API FResourceDropEntry
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FName ItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
+	int32 MinCount = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1"))
+	int32 MaxCount = 1;
+};
 
 UCLASS(ClassGroup = (Survival), BlueprintType, Blueprintable, meta = (BlueprintSpawnableComponent))
 class SURVIVALWORLDUE5_API UResourceNodeComponent : public UActorComponent
@@ -24,7 +40,13 @@ public:
 	FName OutputItemId = FName(TEXT("Stone"));
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Resource")
-	FName RequiredToolItemId = NAME_None;
+	ESurvivalToolType RequiredToolType = ESurvivalToolType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Resource")
+	bool bRequireMatchingTool = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Resource")
+	TArray<FResourceDropEntry> LootTable;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Replicated, Category = "Resource", meta = (ClampMin = "1"))
 	int32 AmountPerHarvest = 1;

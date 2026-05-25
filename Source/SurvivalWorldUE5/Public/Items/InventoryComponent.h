@@ -185,6 +185,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	bool GetItemDefinition(FName ItemId, FItemDef& OutItem) const;
 
+
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool DamageEquippedTool(float DurabilityDamage, ESurvivalToolType RequiredToolType, bool bRequireMatchingTool, float& OutEfficiency, FName& OutToolItemId);
+
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	int32 GetEquippedSlotIndex() const { return EquippedSlotIndex; }
 
