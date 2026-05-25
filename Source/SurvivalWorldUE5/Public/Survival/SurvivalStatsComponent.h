@@ -81,6 +81,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Survival")
 	void SetEncumbranceRatio(float NewEncumbranceRatio);
 
+	UFUNCTION(BlueprintCallable, Category = "Survival")
+	void SetSurvivalStats(float NewHealth, float NewHunger, float NewThirst, float NewStamina);
+
+	UFUNCTION(BlueprintCallable, Category = "Survival")
+	void ApplyNutrition(float NutritionAmount, float HydrationAmount);
+
 	UFUNCTION(BlueprintPure, Category = "Survival")
 	bool IsAlive() const { return Health > 0.0f; }
 

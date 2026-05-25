@@ -22,7 +22,10 @@ enum class ESurvivalItemCategory : uint8
 	Ore,
 	Quest,
 	Special,
-	Misc
+	Misc,
+	RawResource,
+	ProcessedMaterial,
+	NaturalMaterial
 };
 
 UENUM(BlueprintType)
@@ -197,6 +200,30 @@ struct SURVIVALWORLDUE5_API FItemDef
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FRotator PreviewRotation = FRotator::ZeroRotator;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bIsEdible = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", EditCondition = "bIsEdible"))
+	int32 NutritionValue = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0", EditCondition = "bIsEdible"))
+	int32 HydrationValue = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bIsFuel = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0", Units = "s", EditCondition = "bIsFuel"))
+	float BurnDurationSeconds = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	bool bCanBeProcessed = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (EditCondition = "bCanBeProcessed"))
+	FName ProcessingOutputItemId = NAME_None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "1", EditCondition = "bCanBeProcessed"))
+	int32 ProcessingOutputCount = 1;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 SortOrder = 0;

@@ -4,6 +4,7 @@
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
 #include "Player/SurvivalPlayerController.h"
+#include "Survival/BodyConditionComponent.h"
 #include "Survival/SurvivalStatsComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -26,6 +27,7 @@ ASurvivalCharacter::ASurvivalCharacter()
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
 	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("Crafting"));
 	SurvivalStatsComponent = CreateDefaultSubobject<USurvivalStatsComponent>(TEXT("SurvivalStats"));
+	BodyConditionComponent = CreateDefaultSubobject<UBodyConditionComponent>(TEXT("BodyCondition"));
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
@@ -129,6 +131,28 @@ bool ASurvivalCharacter::UseInteract()
 	}
 
 	return IInteractable::Execute_Interact(HitActor, this);
+}
+
+bool ASurvivalCharacter::ConsumeInventoryItem(FName ItemId)
+{
+	if (!InventoryComponent || !CraftingComponent || !SurvivalStatsComponent || ItemId.IsNone())
+	{
+		return false;
+	}
+
+	FItemDef Item;
+	if (!CraftingComponent->GetItemDefinition(ItemId, Item) || !Item.bIsEdible)
+	{
+		return false;
+	}
+
+	if (!InventoryComponent->RemoveItem(ItemId, 1))
+	{
+		return false;
+	}
+
+	SurvivalStatsComponent->ApplyNutrition(static_cast<float>(Item.NutritionValue), static_cast<float>(Item.HydrationValue));
+	return true;
 }
 
 void ASurvivalCharacter::Move(const FInputActionValue& Value)

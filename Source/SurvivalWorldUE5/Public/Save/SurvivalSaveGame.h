@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "GameFramework/SaveGame.h"
 #include "Items/InventoryComponent.h"
+#include "Survival/BodyConditionComponent.h"
+#include "World/WorldTimeWeatherSubsystem.h"
 #include "SurvivalSaveGame.generated.h"
 
 USTRUCT(BlueprintType)
@@ -31,6 +33,24 @@ public:
 
 	UPROPERTY(BlueprintReadWrite)
 	FTransform PlayerTransform;
+
+	UPROPERTY(BlueprintReadWrite)
+	float PlayerHealth = 100.0f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float PlayerHunger = 100.0f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float PlayerThirst = 100.0f;
+
+	UPROPERTY(BlueprintReadWrite)
+	float PlayerStamina = 100.0f;
+
+	UPROPERTY(BlueprintReadWrite)
+	FBodyConditionState BodyCondition;
+
+	UPROPERTY(BlueprintReadWrite)
+	FWorldTimeWeatherState WorldTimeWeather;
 
 	UPROPERTY(BlueprintReadWrite)
 	TMap<FName, int32> InventorySnapshot;
