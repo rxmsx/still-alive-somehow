@@ -121,6 +121,18 @@ struct SURVIVALWORLDUE5_API FSurvivalItemEffect
 	bool bRemovesNegativeState = false;
 };
 
+
+UENUM(BlueprintType)
+enum class ESurvivalToolType : uint8
+{
+	None,
+	Axe,
+	Pickaxe,
+	Knife,
+	Hammer,
+	Hand
+};
+
 USTRUCT(BlueprintType)
 struct SURVIVALWORLDUE5_API FItemDef
 {
@@ -230,6 +242,12 @@ struct SURVIVALWORLDUE5_API FItemDef
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	bool bIsTool = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	ESurvivalToolType ToolType = ESurvivalToolType::None;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = (ClampMin = "0.0"))
+	float HarvestEfficiency = 1.0f;
+
 
 	int32 GetEffectiveMaxStack() const { return bStackable ? FMath::Max(1, MaxStack) : 1; }
 	float GetSpawnDurability() const { return bHasDurability ? FMath::Max(1.0f, MaxDurability) : 0.0f; }

@@ -768,6 +768,47 @@ void UInventoryComponent::SanitizeSlotIndices()
 	}
 }
 
+
+
+bool UInventoryComponent::DamageEquippedTool(float DurabilityDamage, ESurvivalToolType RequiredToolType, bool bRequireMatchingTool, float& OutEfficiency, FName& OutToolItemId)
+{
+	OutEfficiency = 0.0f;
+	OutToolItemId = NAME_None;
+	if (!IsValidInventorySlot(EquippedSlotIndex))
+	{
+		return !bRequireMatchingTool;
+	}
+
+	FInventoryStack& Slot = ReplicatedStacks[EquippedSlotIndex];
+	if (Slot.IsEmpty())
+	{
+		return !bRequireMatchingTool;
+	}
+
+	const FItemDef* ItemDef = ResolveItemDefinition(Slot.ItemId);
+	if (!ItemDef || !ItemDef->bIsTool || (RequiredToolType != ESurvivalToolType::None && ItemDef->ToolType != RequiredToolType))
+	{
+		return !bRequireMatchingTool;
+	}
+
+	if (ItemDef->bHasDurability && Slot.Durability <= 0.0f)
+	{
+		return false;
+	}
+
+	OutToolItemId = Slot.ItemId;
+	OutEfficiency = FMath::Max(0.0f, ItemDef->HarvestEfficiency);
+	if (ItemDef->bHasDurability)
+	{
+		Slot.Durability = FMath::Max(0.0f, Slot.Durability - FMath::Max(0.0f, DurabilityDamage));
+		if (Slot.Durability <= 0.0f)
+		{
+			Slot.Durability = 0.0f;
+		}
+		BroadcastInventoryChanged();
+	}
+	return true;
+}
 void UInventoryComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
