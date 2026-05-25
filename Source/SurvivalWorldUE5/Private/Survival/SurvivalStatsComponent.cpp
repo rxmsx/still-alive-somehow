@@ -54,6 +54,22 @@ void USurvivalStatsComponent::ApplyHealthDelta(float Delta)
 	ClampAndBroadcast();
 }
 
+void USurvivalStatsComponent::ApplyNutrition(float NutritionAmount, float HydrationAmount)
+{
+	Hunger += NutritionAmount;
+	Thirst += HydrationAmount;
+	ClampAndBroadcast();
+}
+
+void USurvivalStatsComponent::SetSurvivalStats(float NewHealth, float NewHunger, float NewThirst, float NewStamina)
+{
+	Health = NewHealth;
+	Hunger = NewHunger;
+	Thirst = NewThirst;
+	Stamina = NewStamina;
+	ClampAndBroadcast();
+}
+
 void USurvivalStatsComponent::OnRep_Stats()
 {
 	OnStatsChanged.Broadcast();

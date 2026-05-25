@@ -1,7 +1,10 @@
 #include "Player/SurvivalCharacter.h"
+#include "Crafting/CraftingComponent.h"
 #include "EnhancedInputComponent.h"
 #include "Interfaces/Interactable.h"
 #include "Items/InventoryComponent.h"
+#include "Player/SurvivalPlayerController.h"
+#include "Survival/BodyConditionComponent.h"
 #include "Survival/SurvivalStatsComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -22,7 +25,9 @@ ASurvivalCharacter::ASurvivalCharacter()
 	FirstPersonCamera->bUsePawnControlRotation = true;
 
 	InventoryComponent = CreateDefaultSubobject<UInventoryComponent>(TEXT("Inventory"));
+	CraftingComponent = CreateDefaultSubobject<UCraftingComponent>(TEXT("Crafting"));
 	SurvivalStatsComponent = CreateDefaultSubobject<USurvivalStatsComponent>(TEXT("SurvivalStats"));
+	BodyConditionComponent = CreateDefaultSubobject<UBodyConditionComponent>(TEXT("BodyCondition"));
 
 	GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
 }
@@ -37,6 +42,11 @@ void ASurvivalCharacter::BeginPlay()
 void ASurvivalCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (IsGameplayInputBlocked())
+	{
+		bWantsToSprint = false;
+	}
 
 	if (SurvivalStatsComponent)
 	{
@@ -123,8 +133,35 @@ bool ASurvivalCharacter::UseInteract()
 	return IInteractable::Execute_Interact(HitActor, this);
 }
 
+bool ASurvivalCharacter::ConsumeInventoryItem(FName ItemId)
+{
+	if (!InventoryComponent || !CraftingComponent || !SurvivalStatsComponent || ItemId.IsNone())
+	{
+		return false;
+	}
+
+	FItemDef Item;
+	if (!CraftingComponent->GetItemDefinition(ItemId, Item) || !Item.bIsEdible)
+	{
+		return false;
+	}
+
+	if (!InventoryComponent->RemoveItem(ItemId, 1))
+	{
+		return false;
+	}
+
+	SurvivalStatsComponent->ApplyNutrition(static_cast<float>(Item.NutritionValue), static_cast<float>(Item.HydrationValue));
+	return true;
+}
+
 void ASurvivalCharacter::Move(const FInputActionValue& Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	const FVector2D MovementVector = Value.Get<FVector2D>();
 	MoveForward(MovementVector.Y);
 	MoveRight(MovementVector.X);
@@ -132,6 +169,11 @@ void ASurvivalCharacter::Move(const FInputActionValue& Value)
 
 void ASurvivalCharacter::Look(const FInputActionValue& Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	const FVector2D LookAxisVector = Value.Get<FVector2D>();
 	AddControllerYawInput(LookAxisVector.X);
 	AddControllerPitchInput(LookAxisVector.Y);
@@ -139,6 +181,11 @@ void ASurvivalCharacter::Look(const FInputActionValue& Value)
 
 void ASurvivalCharacter::StartSprint()
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	bWantsToSprint = true;
 	RefreshMovementSpeed();
 }
@@ -151,6 +198,11 @@ void ASurvivalCharacter::StopSprint()
 
 void ASurvivalCharacter::StartJump()
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	Jump();
 }
 
@@ -161,11 +213,21 @@ void ASurvivalCharacter::StopJump()
 
 void ASurvivalCharacter::HandleInteractInput()
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	UseInteract();
 }
 
 void ASurvivalCharacter::MoveForward(float Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorForwardVector(), Value);
@@ -174,6 +236,11 @@ void ASurvivalCharacter::MoveForward(float Value)
 
 void ASurvivalCharacter::MoveRight(float Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	if (!FMath::IsNearlyZero(Value))
 	{
 		AddMovementInput(GetActorRightVector(), Value);
@@ -182,11 +249,21 @@ void ASurvivalCharacter::MoveRight(float Value)
 
 void ASurvivalCharacter::Turn(float Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	AddControllerYawInput(Value);
 }
 
 void ASurvivalCharacter::LookUp(float Value)
 {
+	if (IsGameplayInputBlocked())
+	{
+		return;
+	}
+
 	AddControllerPitchInput(Value);
 }
 
@@ -210,6 +287,12 @@ void ASurvivalCharacter::RefreshMovementSpeed()
 
 	const bool bCanSprint = bWantsToSprint && (!SurvivalStatsComponent || SurvivalStatsComponent->Stamina > 1.0f);
 	GetCharacterMovement()->MaxWalkSpeed = bCanSprint ? SprintSpeed : WalkSpeed;
+}
+
+bool ASurvivalCharacter::IsGameplayInputBlocked() const
+{
+	const ASurvivalPlayerController* SurvivalController = Cast<ASurvivalPlayerController>(GetController());
+	return SurvivalController && SurvivalController->IsGameplayInputBlocked();
 }
 
 void ASurvivalCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

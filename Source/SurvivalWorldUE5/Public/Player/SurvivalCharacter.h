@@ -5,6 +5,8 @@
 #include "SurvivalCharacter.generated.h"
 
 class UCameraComponent;
+class UBodyConditionComponent;
+class UCraftingComponent;
 class UInputAction;
 class UInputMappingContext;
 class UInventoryComponent;
@@ -29,8 +31,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Inventory")
 	TObjectPtr<UInventoryComponent> InventoryComponent;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Crafting")
+	TObjectPtr<UCraftingComponent> CraftingComponent;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Survival")
 	TObjectPtr<USurvivalStatsComponent> SurvivalStatsComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Survival")
+	TObjectPtr<UBodyConditionComponent> BodyConditionComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (ClampMin = "50.0"))
 	float InteractionRange = 450.0f;
@@ -62,6 +70,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Interaction")
 	bool UseInteract();
 
+	UFUNCTION(BlueprintCallable, Category = "Inventory")
+	bool ConsumeInventoryItem(FName ItemId);
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -82,4 +93,5 @@ protected:
 	void LookUp(float Value);
 	void AddStarterItems();
 	void RefreshMovementSpeed();
+	bool IsGameplayInputBlocked() const;
 };

@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Inventory")
 	TMap<FName, int32> GetInventorySnapshot() const;
 
+	UFUNCTION(BlueprintPure, Category = "Inventory")
+	TArray<FInventoryStack> GetSortedStacks() const;
+
 	const TMap<FName, int32>& GetSnapshot() const { return ItemCounts; }
 
 	UFUNCTION(BlueprintCallable, Category = "Inventory")
