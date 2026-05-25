@@ -1,11 +1,47 @@
 #include "Crafting/CraftingComponent.h"
 
-#include "Items/InventoryComponent.h"
 #include "World/OpenWorldPrototypeSettings.h"
+#include "GameFramework/Actor.h"
+#include "Net/UnrealNetwork.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogSurvivalCrafting, Log, All);
+
+namespace
+{
+	FText CraftingFailureText(ECraftingFailureReason Reason)
+	{
+		switch (Reason)
+		{
+		case ECraftingFailureReason::UnknownRecipe:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureUnknownRecipe", "Rezept nicht gefunden.");
+		case ECraftingFailureReason::RecipeLocked:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureRecipeLocked", "Rezept ist noch unbekannt.");
+		case ECraftingFailureReason::MissingMaterials:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureMissingMaterials", "Material fehlt oder liegt nicht passend auf der Werkflaeche.");
+		case ECraftingFailureReason::WrongStation:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureWrongStation", "Falsche Werkbank oder Feuerstelle.");
+		case ECraftingFailureReason::InventoryFull:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureInventoryFull", "Inventar ist voll oder zu schwer.");
+		case ECraftingFailureReason::InvalidInput:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureInvalidInput", "Ungueltige Crafting-Eingabe.");
+		case ECraftingFailureReason::AlreadyCrafting:
+			return NSLOCTEXT("SurvivalWorld", "CraftingFailureAlreadyCrafting", "Crafting laeuft bereits.");
+		default:
+			return FText::GetEmpty();
+		}
+	}
+
+	bool RecipeMatchesCategory(const FCraftingRecipe& Recipe, ECraftingRecipeCategory Category)
+	{
+		return Category == ECraftingRecipeCategory::Unknown || Recipe.Category == Category;
+	}
+}
 
 UCraftingComponent::UCraftingComponent()
 {
-	PrimaryComponentTick.bCanEverTick = false;
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.bStartWithTickEnabled = false;
+	SetIsReplicatedByDefault(true);
 }
 
 void UCraftingComponent::BeginPlay()
@@ -19,6 +55,32 @@ void UCraftingComponent::BeginPlay()
 			ItemCatalog = Settings->ItemCatalog.LoadSynchronous();
 		}
 	}
+
+	EnsureCraftingSlots();
+}
+
+void UCraftingComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	if (ActiveRecipeId.IsNone())
+	{
+		if (IsRegistered())
+		{
+			SetComponentTickEnabled(false);
+		}
+		return;
+	}
+
+	ActiveRecipeElapsedSeconds += FMath::Max(0.0f, DeltaTime);
+	if (ActiveRecipeElapsedSeconds >= ActiveRecipeTotalSeconds)
+	{
+		FinishActiveRecipe();
+	}
+	else
+	{
+		OnCraftingChanged.Broadcast();
+	}
 }
 
 void UCraftingComponent::SetItemCatalog(USurvivalItemCatalog* NewItemCatalog)
@@ -29,20 +91,53 @@ void UCraftingComponent::SetItemCatalog(USurvivalItemCatalog* NewItemCatalog)
 
 TArray<FCraftingRecipe> UCraftingComponent::GetKnownRecipes() const
 {
-	if (ItemCatalog && ItemCatalog->Recipes.Num() > 0)
+	TArray<FCraftingRecipe> Recipes;
+	for (const FCraftingRecipe& Recipe : GetAllRecipes())
 	{
-		TArray<FCraftingRecipe> Recipes;
-		for (const FCraftingRecipe& Recipe : ItemCatalog->Recipes)
+		if (IsRecipeKnown(Recipe.RecipeId))
 		{
-			if (Recipe.bUnlockedByDefault)
+			Recipes.Add(Recipe);
+		}
+	}
+	return Recipes;
+}
+
+TArray<FCraftingRecipe> UCraftingComponent::GetVisibleRecipes(bool bIncludeLocked) const
+{
+	TArray<FCraftingRecipe> Recipes;
+	for (const FCraftingRecipe& Recipe : GetAllRecipes())
+	{
+		if (IsRecipeKnown(Recipe.RecipeId) || (bIncludeLocked && Recipe.bShowWhenLocked))
+		{
+			Recipes.Add(Recipe);
+		}
+	}
+	return Recipes;
+}
+
+TArray<FCraftingRecipe> UCraftingComponent::GetRecipesFiltered(const FString& SearchText, ECraftingRecipeCategory Category, bool bIncludeLocked) const
+{
+	TArray<FCraftingRecipe> Recipes;
+	const FString NormalizedSearch = SearchText.TrimStartAndEnd().ToLower();
+	for (const FCraftingRecipe& Recipe : GetVisibleRecipes(bIncludeLocked))
+	{
+		if (!RecipeMatchesCategory(Recipe, Category))
+		{
+			continue;
+		}
+
+		if (!NormalizedSearch.IsEmpty())
+		{
+			const FString Haystack = FString::Printf(TEXT("%s %s %s"), *Recipe.RecipeId.ToString(), *Recipe.DisplayName.ToString(), *Recipe.Description.ToString()).ToLower();
+			if (!Haystack.Contains(NormalizedSearch))
 			{
-				Recipes.Add(Recipe);
+				continue;
 			}
 		}
-		return Recipes;
-	}
 
-	return GetDefaultRecipes();
+		Recipes.Add(Recipe);
+	}
+	return Recipes;
 }
 
 TArray<FCraftingRecipe> UCraftingComponent::GetCraftableRecipes() const
@@ -60,15 +155,318 @@ TArray<FCraftingRecipe> UCraftingComponent::GetCraftableRecipes() const
 
 bool UCraftingComponent::CanCraft(FName RecipeId) const
 {
-	FCraftingRecipe FallbackRecipe;
-	const FCraftingRecipe* Recipe = FindRecipe(RecipeId, FallbackRecipe);
+	return ValidateCraftRecipe(RecipeId).bCanCraft;
+}
+
+FCraftingValidationResult UCraftingComponent::ValidateCraftRecipe(FName RecipeId) const
+{
+	FCraftingValidationResult Result;
+	const FCraftingRecipe* Recipe = FindRecipe(RecipeId);
+	if (!Recipe || Recipe->OutputItemId.IsNone() || Recipe->OutputCount <= 0)
+	{
+		Result.FailureReason = ECraftingFailureReason::UnknownRecipe;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	if (!IsRecipeKnown(RecipeId))
+	{
+		Result.FailureReason = ECraftingFailureReason::RecipeLocked;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	if (!ActiveRecipeId.IsNone())
+	{
+		Result.FailureReason = ECraftingFailureReason::AlreadyCrafting;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	if (Recipe->RequiredStation != ECraftingStationType::None && Recipe->RequiredStation != ActiveCraftingStation)
+	{
+		Result.FailureReason = ECraftingFailureReason::WrongStation;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
 	const UInventoryComponent* Inventory = GetOwnerInventory();
-	if (!Recipe || !Inventory || Recipe->OutputItemId.IsNone())
+	if (!Inventory)
+	{
+		Result.FailureReason = ECraftingFailureReason::InvalidInput;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	const bool bUseSurface = HasAnyCraftingInput();
+	const bool bHasIngredients = bUseSurface ? HasRecipeIngredientsOnSurface(*Recipe) : HasRecipeIngredientsInInventory(*Recipe);
+	if (!bHasIngredients)
+	{
+		Result.FailureReason = ECraftingFailureReason::MissingMaterials;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	if (!CanInventoryAcceptRecipeOutput(*Recipe, bUseSurface))
+	{
+		Result.FailureReason = ECraftingFailureReason::InventoryFull;
+		Result.Message = CraftingFailureText(Result.FailureReason);
+		return Result;
+	}
+
+	Result.bCanCraft = true;
+	Result.FailureReason = ECraftingFailureReason::None;
+	return Result;
+}
+
+bool UCraftingComponent::CraftRecipe(FName RecipeId)
+{
+	const FCraftingValidationResult Validation = ValidateCraftRecipe(RecipeId);
+	if (!Validation.bCanCraft)
+	{
+		FailCrafting(RecipeId, Validation.FailureReason, Validation.Message);
+		return false;
+	}
+
+	const FCraftingRecipe* Recipe = FindRecipe(RecipeId);
+	if (!Recipe)
+	{
+		FailCrafting(RecipeId, ECraftingFailureReason::UnknownRecipe, CraftingFailureText(ECraftingFailureReason::UnknownRecipe));
+		return false;
+	}
+
+	const bool bConsumed = HasAnyCraftingInput() ? ConsumeRecipeIngredientsFromSurface(*Recipe) : ConsumeRecipeIngredientsFromInventory(*Recipe);
+	if (!bConsumed)
+	{
+		FailCrafting(RecipeId, ECraftingFailureReason::MissingMaterials, CraftingFailureText(ECraftingFailureReason::MissingMaterials));
+		return false;
+	}
+
+	ActiveRecipeId = RecipeId;
+	ActiveRecipeElapsedSeconds = 0.0f;
+	ActiveRecipeTotalSeconds = FMath::Max(0.0f, Recipe->CraftTimeSeconds);
+	SetCraftingMessage(FText::GetEmpty(), false);
+
+	if (ActiveRecipeTotalSeconds <= 0.0f)
+	{
+		FinishActiveRecipe();
+	}
+	else
+	{
+		if (IsRegistered())
+		{
+			SetComponentTickEnabled(true);
+		}
+		OnCraftingChanged.Broadcast();
+	}
+
+	return true;
+}
+
+bool UCraftingComponent::UnlockRecipe(FName RecipeId)
+{
+	if (!FindRecipe(RecipeId) || IsRecipeKnown(RecipeId))
 	{
 		return false;
 	}
 
-	for (const FCraftingIngredient& Ingredient : Recipe->Ingredients)
+	UnlockedRecipeIds.Add(RecipeId);
+	OnCraftingChanged.Broadcast();
+	return true;
+}
+
+bool UCraftingComponent::IsRecipeKnown(FName RecipeId) const
+{
+	const FCraftingRecipe* Recipe = FindRecipe(RecipeId);
+	return Recipe && (Recipe->bUnlockedByDefault || UnlockedRecipeIds.Contains(RecipeId));
+}
+
+void UCraftingComponent::SetActiveCraftingStation(ECraftingStationType NewStation)
+{
+	ActiveCraftingStation = NewStation;
+	SetCraftingMessage(FText::GetEmpty(), false);
+	OnCraftingChanged.Broadcast();
+}
+
+bool UCraftingComponent::AddInventorySlotToCrafting(int32 InventorySlotIndex, int32 Count)
+{
+	UInventoryComponent* Inventory = GetOwnerInventory();
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	EnsureCraftingSlots();
+	const FInventoryStack SourceSlot = Inventory->GetSlot(InventorySlotIndex);
+	if (SourceSlot.IsEmpty())
+	{
+		return false;
+	}
+
+	const int32 MoveCount = Count <= 0 ? SourceSlot.Count : FMath::Min(SourceSlot.Count, Count);
+	TArray<FInventoryStack> CandidateCraftingSlots = CraftingInputSlots;
+	if (!AddItemToCraftingSlots(SourceSlot.ItemId, MoveCount, SourceSlot.Durability, SourceSlot.Freshness, CandidateCraftingSlots))
+	{
+		return false;
+	}
+
+	if (!Inventory->RemoveFromSlot(InventorySlotIndex, MoveCount))
+	{
+		return false;
+	}
+
+	CraftingInputSlots = CandidateCraftingSlots;
+	EnsureCraftingSlots();
+	OnCraftingChanged.Broadcast();
+	return true;
+}
+
+bool UCraftingComponent::RemoveCraftingInput(int32 CraftingSlotIndex)
+{
+	if (!CraftingInputSlots.IsValidIndex(CraftingSlotIndex) || CraftingInputSlots[CraftingSlotIndex].IsEmpty())
+	{
+		return false;
+	}
+
+	UInventoryComponent* Inventory = GetOwnerInventory();
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	const FInventoryStack Slot = CraftingInputSlots[CraftingSlotIndex];
+	if (!Inventory->AddItemWithState(Slot.ItemId, Slot.Count, Slot.Durability, Slot.Freshness))
+	{
+		return false;
+	}
+
+	CraftingInputSlots[CraftingSlotIndex] = FInventoryStack();
+	EnsureCraftingSlots();
+	OnCraftingChanged.Broadcast();
+	return true;
+}
+
+void UCraftingComponent::ClearCraftingInputs()
+{
+	for (int32 SlotIndex = CraftingInputSlots.Num() - 1; SlotIndex >= 0; --SlotIndex)
+	{
+		RemoveCraftingInput(SlotIndex);
+	}
+}
+
+TMap<FName, int32> UCraftingComponent::GetCraftingInputCounts() const
+{
+	TMap<FName, int32> Counts;
+	for (const FInventoryStack& Slot : CraftingInputSlots)
+	{
+		if (!Slot.IsEmpty())
+		{
+			Counts.FindOrAdd(Slot.ItemId) += Slot.Count;
+		}
+	}
+	return Counts;
+}
+
+bool UCraftingComponent::FindMatchingRecipeFromInputs(FCraftingRecipe& OutRecipe) const
+{
+	for (const FCraftingRecipe& Recipe : GetKnownRecipes())
+	{
+		if (HasRecipeIngredientsOnSurface(Recipe) && (Recipe.RequiredStation == ECraftingStationType::None || Recipe.RequiredStation == ActiveCraftingStation))
+		{
+			OutRecipe = Recipe;
+			return true;
+		}
+	}
+	return false;
+}
+
+float UCraftingComponent::GetCraftingProgress() const
+{
+	if (ActiveRecipeId.IsNone() || ActiveRecipeTotalSeconds <= 0.0f)
+	{
+		return 0.0f;
+	}
+	return FMath::Clamp(ActiveRecipeElapsedSeconds / ActiveRecipeTotalSeconds, 0.0f, 1.0f);
+}
+
+FText UCraftingComponent::GetItemDisplayName(FName ItemId) const
+{
+	if (const FItemDef* Item = ResolveItemDefinition(ItemId))
+	{
+		if (!Item->DisplayName.IsEmpty())
+		{
+			return Item->DisplayName;
+		}
+	}
+
+	return FText::FromName(ItemId);
+}
+
+ESurvivalItemCategory UCraftingComponent::GetItemCategory(FName ItemId) const
+{
+	if (const FItemDef* Item = ResolveItemDefinition(ItemId))
+	{
+		return Item->Category;
+	}
+
+	return ESurvivalItemCategory::Misc;
+}
+
+bool UCraftingComponent::GetItemDefinition(FName ItemId, FItemDef& OutItem) const
+{
+	if (const FItemDef* Item = ResolveItemDefinition(ItemId))
+	{
+		OutItem = *Item;
+		return true;
+	}
+
+	return false;
+}
+
+void UCraftingComponent::OnRep_CraftingState()
+{
+	EnsureCraftingSlots();
+	OnCraftingChanged.Broadcast();
+}
+
+const FCraftingRecipe* UCraftingComponent::FindRecipe(FName RecipeId) const
+{
+	if (ItemCatalog)
+	{
+		if (const FCraftingRecipe* Recipe = ItemCatalog->FindRecipe(RecipeId))
+		{
+			return Recipe;
+		}
+	}
+
+	return USurvivalItemCatalog::FindDefaultRecipe(RecipeId);
+}
+
+UInventoryComponent* UCraftingComponent::GetOwnerInventory() const
+{
+	const AActor* Owner = GetOwner();
+	return Owner ? Owner->FindComponentByClass<UInventoryComponent>() : nullptr;
+}
+
+TArray<FCraftingRecipe> UCraftingComponent::GetAllRecipes() const
+{
+	if (ItemCatalog && ItemCatalog->Recipes.Num() > 0)
+	{
+		return ItemCatalog->Recipes;
+	}
+
+	return USurvivalItemCatalog::GetDefaultRecipes();
+}
+
+bool UCraftingComponent::HasRecipeIngredientsInInventory(const FCraftingRecipe& Recipe) const
+{
+	const UInventoryComponent* Inventory = GetOwnerInventory();
+	if (!Inventory)
+	{
+		return false;
+	}
+
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
 	{
 		if (Ingredient.ItemId.IsNone() || Ingredient.Count <= 0 || !Inventory->HasItem(Ingredient.ItemId, Ingredient.Count))
 		{
@@ -79,22 +477,29 @@ bool UCraftingComponent::CanCraft(FName RecipeId) const
 	return true;
 }
 
-bool UCraftingComponent::CraftRecipe(FName RecipeId)
+bool UCraftingComponent::HasRecipeIngredientsOnSurface(const FCraftingRecipe& Recipe) const
 {
-	if (!CanCraft(RecipeId))
+	const TMap<FName, int32> InputCounts = GetCraftingInputCounts();
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
 	{
-		return false;
+		if (Ingredient.ItemId.IsNone() || Ingredient.Count <= 0 || InputCounts.FindRef(Ingredient.ItemId) < Ingredient.Count)
+		{
+			return false;
+		}
 	}
 
-	FCraftingRecipe FallbackRecipe;
-	const FCraftingRecipe* Recipe = FindRecipe(RecipeId, FallbackRecipe);
+	return true;
+}
+
+bool UCraftingComponent::ConsumeRecipeIngredientsFromInventory(const FCraftingRecipe& Recipe)
+{
 	UInventoryComponent* Inventory = GetOwnerInventory();
-	if (!Recipe || !Inventory)
+	if (!Inventory || !HasRecipeIngredientsInInventory(Recipe))
 	{
 		return false;
 	}
 
-	for (const FCraftingIngredient& Ingredient : Recipe->Ingredients)
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
 	{
 		if (!Inventory->RemoveItem(Ingredient.ItemId, Ingredient.Count))
 		{
@@ -102,335 +507,260 @@ bool UCraftingComponent::CraftRecipe(FName RecipeId)
 		}
 	}
 
-	const bool bAddedOutput = Inventory->AddItem(Recipe->OutputItemId, Recipe->OutputCount);
-	if (bAddedOutput)
-	{
-		OnCraftingChanged.Broadcast();
-	}
-	return bAddedOutput;
+	return true;
 }
 
-FText UCraftingComponent::GetItemDisplayName(FName ItemId) const
+bool UCraftingComponent::ConsumeRecipeIngredientsFromSurface(const FCraftingRecipe& Recipe)
 {
-	if (ItemCatalog)
+	if (!HasRecipeIngredientsOnSurface(Recipe))
 	{
-		if (const FItemDef* Item = ItemCatalog->FindItem(ItemId))
+		return false;
+	}
+
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
+	{
+		int32 Remaining = Ingredient.Count;
+		for (FInventoryStack& Slot : CraftingInputSlots)
 		{
-			if (!Item->DisplayName.IsEmpty())
+			if (Remaining <= 0)
 			{
-				return Item->DisplayName;
+				break;
+			}
+
+			if (Slot.ItemId != Ingredient.ItemId || Slot.Count <= 0)
+			{
+				continue;
+			}
+
+			const int32 Consumed = FMath::Min(Slot.Count, Remaining);
+			Slot.Count -= Consumed;
+			Remaining -= Consumed;
+			if (Slot.Count <= 0)
+			{
+				Slot = FInventoryStack();
 			}
 		}
 	}
 
-	for (const FItemDef& Item : GetDefaultItems())
-	{
-		if (Item.ItemId == ItemId && !Item.DisplayName.IsEmpty())
-		{
-			return Item.DisplayName;
-		}
-	}
-
-	return FText::FromName(ItemId);
+	EnsureCraftingSlots();
+	return true;
 }
 
-ESurvivalItemCategory UCraftingComponent::GetItemCategory(FName ItemId) const
+bool UCraftingComponent::ConsumeRecipeIngredientsFromSlots(const FCraftingRecipe& Recipe, TArray<FInventoryStack>& Slots) const
 {
-	if (ItemCatalog)
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
 	{
-		if (const FItemDef* Item = ItemCatalog->FindItem(ItemId))
+		int32 Available = 0;
+		for (const FInventoryStack& Slot : Slots)
 		{
-			return Item->Category;
+			if (Slot.ItemId == Ingredient.ItemId)
+			{
+				Available += Slot.Count;
+			}
+		}
+
+		if (Available < Ingredient.Count)
+		{
+			return false;
 		}
 	}
 
-	for (const FItemDef& Item : GetDefaultItems())
+	for (const FCraftingIngredient& Ingredient : Recipe.Ingredients)
 	{
-		if (Item.ItemId == ItemId)
+		int32 Remaining = Ingredient.Count;
+		for (FInventoryStack& Slot : Slots)
 		{
-			return Item.Category;
+			if (Remaining <= 0)
+			{
+				break;
+			}
+
+			if (Slot.ItemId != Ingredient.ItemId || Slot.Count <= 0)
+			{
+				continue;
+			}
+
+			const int32 Consumed = FMath::Min(Slot.Count, Remaining);
+			Slot.Count -= Consumed;
+			Remaining -= Consumed;
+			if (Slot.Count <= 0)
+			{
+				Slot = FInventoryStack();
+			}
 		}
 	}
 
-	return ESurvivalItemCategory::Misc;
+	for (int32 SlotIndex = 0; SlotIndex < Slots.Num(); ++SlotIndex)
+	{
+		Slots[SlotIndex].SlotIndex = SlotIndex;
+	}
+	return true;
 }
 
-bool UCraftingComponent::GetItemDefinition(FName ItemId, FItemDef& OutItem) const
+bool UCraftingComponent::CanInventoryAcceptRecipeOutput(const FCraftingRecipe& Recipe, bool bUseSurface) const
 {
-	if (ItemCatalog)
+	const UInventoryComponent* Inventory = GetOwnerInventory();
+	if (!Inventory)
 	{
-		if (const FItemDef* Item = ItemCatalog->FindItem(ItemId))
+		return false;
+	}
+
+	if (bUseSurface)
+	{
+		return Inventory->CanAddItem(Recipe.OutputItemId, Recipe.OutputCount);
+	}
+
+	TArray<FInventoryStack> ProjectedSlots = Inventory->GetSlots();
+	if (!ConsumeRecipeIngredientsFromSlots(Recipe, ProjectedSlots))
+	{
+		return false;
+	}
+
+	return Inventory->CanAddItemToSlotSnapshot(Recipe.OutputItemId, Recipe.OutputCount, ProjectedSlots);
+}
+
+bool UCraftingComponent::HasAnyCraftingInput() const
+{
+	for (const FInventoryStack& Slot : CraftingInputSlots)
+	{
+		if (!Slot.IsEmpty())
 		{
-			OutItem = *Item;
 			return true;
 		}
 	}
-
-	for (const FItemDef& Item : GetDefaultItems())
-	{
-		if (Item.ItemId == ItemId)
-		{
-			OutItem = Item;
-			return true;
-		}
-	}
-
 	return false;
 }
 
-const FCraftingRecipe* UCraftingComponent::FindRecipe(FName RecipeId, FCraftingRecipe& OutFallbackRecipe) const
+bool UCraftingComponent::AddItemToCraftingSlots(FName ItemId, int32 Count, float Durability, float Freshness, TArray<FInventoryStack>& Slots) const
+{
+	if (ItemId.IsNone() || Count <= 0)
+	{
+		return false;
+	}
+
+	const FItemDef* ItemDef = ResolveItemDefinition(ItemId);
+	const int32 MaxStack = ItemDef ? ItemDef->GetEffectiveMaxStack() : 99;
+	int32 Remaining = Count;
+	for (FInventoryStack& Slot : Slots)
+	{
+		if (Slot.ItemId == ItemId && Slot.Count > 0 && Slot.Count < MaxStack)
+		{
+			const int32 Added = FMath::Min(MaxStack - Slot.Count, Remaining);
+			Slot.Count += Added;
+			Slot.Durability = Durability;
+			Slot.Freshness = FMath::Clamp(Freshness, 0.0f, 1.0f);
+			Remaining -= Added;
+			if (Remaining <= 0)
+			{
+				return true;
+			}
+		}
+	}
+
+	for (int32 SlotIndex = 0; SlotIndex < Slots.Num() && Remaining > 0; ++SlotIndex)
+	{
+		if (!Slots[SlotIndex].IsEmpty())
+		{
+			continue;
+		}
+
+		const int32 Added = FMath::Min(MaxStack, Remaining);
+		FInventoryStack NewSlot;
+		NewSlot.ItemId = ItemId;
+		NewSlot.Count = Added;
+		NewSlot.Durability = Durability;
+		NewSlot.Freshness = FMath::Clamp(Freshness, 0.0f, 1.0f);
+		NewSlot.SlotIndex = SlotIndex;
+		Slots[SlotIndex] = NewSlot;
+		Remaining -= Added;
+	}
+
+	return Remaining <= 0;
+}
+
+void UCraftingComponent::EnsureCraftingSlots()
+{
+	CraftingInputSlots.SetNum(FMath::Max(1, CraftingInputSlotCount));
+	for (int32 SlotIndex = 0; SlotIndex < CraftingInputSlots.Num(); ++SlotIndex)
+	{
+		if (CraftingInputSlots[SlotIndex].IsEmpty())
+		{
+			CraftingInputSlots[SlotIndex] = FInventoryStack();
+		}
+		CraftingInputSlots[SlotIndex].SlotIndex = SlotIndex;
+	}
+}
+
+void UCraftingComponent::FinishActiveRecipe()
+{
+	const FCraftingRecipe* Recipe = FindRecipe(ActiveRecipeId);
+	UInventoryComponent* Inventory = GetOwnerInventory();
+	if (!Recipe || !Inventory || !Inventory->AddItem(Recipe->OutputItemId, Recipe->OutputCount))
+	{
+		FailCrafting(ActiveRecipeId, ECraftingFailureReason::InventoryFull, CraftingFailureText(ECraftingFailureReason::InventoryFull));
+		ActiveRecipeId = NAME_None;
+		ActiveRecipeElapsedSeconds = 0.0f;
+		ActiveRecipeTotalSeconds = 0.0f;
+		if (IsRegistered())
+		{
+			SetComponentTickEnabled(false);
+		}
+		OnCraftingChanged.Broadcast();
+		return;
+	}
+
+	const FName FinishedRecipeId = ActiveRecipeId;
+	const int32 OutputCount = Recipe->OutputCount;
+	ActiveRecipeId = NAME_None;
+	ActiveRecipeElapsedSeconds = 0.0f;
+	ActiveRecipeTotalSeconds = 0.0f;
+	if (IsRegistered())
+	{
+		SetComponentTickEnabled(false);
+	}
+	OnRecipeCrafted.Broadcast(FinishedRecipeId, OutputCount);
+	SetCraftingMessage(FText::Format(NSLOCTEXT("SurvivalWorld", "CraftingSuccessMessage", "Crafted {0} x{1}"), Recipe->DisplayName.IsEmpty() ? FText::FromName(FinishedRecipeId) : Recipe->DisplayName, OutputCount), false);
+	OnCraftingChanged.Broadcast();
+}
+
+void UCraftingComponent::SetCraftingMessage(const FText& Message, bool bIsError)
+{
+	LastCraftingMessage = Message;
+	bLastCraftingMessageIsError = bIsError;
+}
+
+void UCraftingComponent::FailCrafting(FName RecipeId, ECraftingFailureReason Reason, const FText& Message)
+{
+	const FText FailureMessage = Message.IsEmpty() ? CraftingFailureText(Reason) : Message;
+	SetCraftingMessage(FailureMessage, true);
+	UE_LOG(LogSurvivalCrafting, Warning, TEXT("Crafting failed for %s: %s"), *RecipeId.ToString(), *FailureMessage.ToString());
+	OnCraftingFailed.Broadcast(RecipeId, FailureMessage);
+	OnCraftingChanged.Broadcast();
+}
+
+const FItemDef* UCraftingComponent::ResolveItemDefinition(FName ItemId) const
 {
 	if (ItemCatalog)
 	{
-		if (const FCraftingRecipe* Recipe = ItemCatalog->FindRecipe(RecipeId))
+		if (const FItemDef* Item = ItemCatalog->FindItem(ItemId))
 		{
-			return Recipe;
+			return Item;
 		}
 	}
 
-	for (const FCraftingRecipe& Recipe : GetDefaultRecipes())
-	{
-		if (Recipe.RecipeId == RecipeId)
-		{
-			OutFallbackRecipe = Recipe;
-			return &OutFallbackRecipe;
-		}
-	}
-
-	return nullptr;
+	return USurvivalItemCatalog::FindDefaultItem(ItemId);
 }
 
-UInventoryComponent* UCraftingComponent::GetOwnerInventory() const
+void UCraftingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
-	const AActor* Owner = GetOwner();
-	return Owner ? Owner->FindComponentByClass<UInventoryComponent>() : nullptr;
-}
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-TArray<FCraftingRecipe> UCraftingComponent::GetDefaultRecipes() const
-{
-	TArray<FCraftingRecipe> Recipes;
-
-	auto Ingredient = [](const TCHAR* ItemId, int32 Count)
-	{
-		FCraftingIngredient NewIngredient;
-		NewIngredient.ItemId = FName(ItemId);
-		NewIngredient.Count = Count;
-		return NewIngredient;
-	};
-
-	auto AddRecipe = [&Recipes](const TCHAR* RecipeId, const TCHAR* DisplayName, const TCHAR* Description, const TCHAR* OutputItemId, int32 OutputCount, TArray<FCraftingIngredient> Ingredients)
-	{
-		FCraftingRecipe Recipe;
-		Recipe.RecipeId = FName(RecipeId);
-		Recipe.DisplayName = FText::FromString(DisplayName);
-		Recipe.Description = FText::FromString(Description);
-		Recipe.OutputItemId = FName(OutputItemId);
-		Recipe.OutputCount = OutputCount;
-		Recipe.Ingredients = MoveTemp(Ingredients);
-		Recipes.Add(Recipe);
-	};
-
-	AddRecipe(
-		TEXT("Bow"),
-		TEXT("Bogen"),
-		TEXT("Ein einfacher Jagdbogen aus Stoecken, Seil und Tiersehnen."),
-		TEXT("Bow"),
-		1,
-		{
-			Ingredient(TEXT("Stick"), 2),
-			Ingredient(TEXT("Rope"), 1),
-			Ingredient(TEXT("AnimalSinew"), 2)
-		});
-
-	AddRecipe(
-		TEXT("Arrow"),
-		TEXT("Pfeile"),
-		TEXT("Leichte Pfeile mit Feuersteinspitze und Federfuehrung."),
-		TEXT("Arrow"),
-		4,
-		{
-			Ingredient(TEXT("Stick"), 1),
-			Ingredient(TEXT("Feather"), 1),
-			Ingredient(TEXT("Flint"), 1)
-		});
-
-	AddRecipe(
-		TEXT("Axe"),
-		TEXT("Axt"),
-		TEXT("Ein robustes Basiswerkzeug zum Faellen und Zerlegen von Holz."),
-		TEXT("Axe"),
-		1,
-		{
-			Ingredient(TEXT("Stick"), 1),
-			Ingredient(TEXT("Stone"), 1),
-			Ingredient(TEXT("Rope"), 1)
-		});
-
-	AddRecipe(
-		TEXT("Pickaxe"),
-		TEXT("Spitzhacke"),
-		TEXT("Ein schweres Werkzeug fuer Stein, Erz und harte Ressourcenknoten."),
-		TEXT("Pickaxe"),
-		1,
-		{
-			Ingredient(TEXT("Stick"), 2),
-			Ingredient(TEXT("Stone"), 3),
-			Ingredient(TEXT("Rope"), 1)
-		});
-
-	AddRecipe(
-		TEXT("Campfire"),
-		TEXT("Lagerfeuer"),
-		TEXT("Eine einfache Feuerstelle zum Kochen, Waermen und als Lichtquelle."),
-		TEXT("Campfire"),
-		1,
-		{
-			Ingredient(TEXT("Wood"), 5),
-			Ingredient(TEXT("Stone"), 3)
-		});
-
-	AddRecipe(
-		TEXT("IronKnife"),
-		TEXT("Eisenmesser"),
-		TEXT("Ein scharfes Messer fuer Jagd, Verarbeitung und Nahkampf."),
-		TEXT("IronKnife"),
-		1,
-		{
-			Ingredient(TEXT("IronIngot"), 1),
-			Ingredient(TEXT("WoodGrip"), 1),
-			Ingredient(TEXT("Leather"), 1)
-		});
-
-	AddRecipe(
-		TEXT("FishingRod"),
-		TEXT("Angel"),
-		TEXT("Eine einfache Angel zum Fischen an Seen, Fluesse und Kueste."),
-		TEXT("FishingRod"),
-		1,
-		{
-			Ingredient(TEXT("Stick"), 2),
-			Ingredient(TEXT("Rope"), 1),
-			Ingredient(TEXT("IronHook"), 1)
-		});
-
-	AddRecipe(
-		TEXT("StoneBlade"),
-		TEXT("Steinklinge"),
-		TEXT("Eine scharfe Starterklinge aus Stein."),
-		TEXT("StoneBlade"),
-		1,
-		{
-			Ingredient(TEXT("Stone"), 2)
-		});
-
-	AddRecipe(
-		TEXT("Stick"),
-		TEXT("Stock"),
-		TEXT("Ein einfacher Grundbestandteil aus einem Ast."),
-		TEXT("Stick"),
-		2,
-		{
-			Ingredient(TEXT("Branch"), 1)
-		});
-
-	return Recipes;
-}
-
-TArray<FItemDef> UCraftingComponent::GetDefaultItems() const
-{
-	TArray<FItemDef> Items;
-
-	auto AddItem = [&Items](
-		const TCHAR* ItemId,
-		const TCHAR* DisplayName,
-		ESurvivalItemCategory Category,
-		const TCHAR* Description,
-		int32 MaxStack,
-		float WeightKg,
-		ESurvivalItemRarity Rarity,
-		bool bIsEdible,
-		int32 NutritionValue,
-		bool bIsFuel,
-		float BurnDurationSeconds,
-		bool bCanBeProcessed,
-		const TCHAR* ProcessingOutputItemId,
-		int32 ProcessingOutputCount,
-		bool bIsTool,
-		int32 SortOrder)
-	{
-		FItemDef Item;
-		Item.ItemId = FName(ItemId);
-		Item.DisplayName = FText::FromString(DisplayName);
-		Item.Description = FText::FromString(Description);
-		Item.Category = Category;
-		Item.MaxStack = MaxStack;
-		Item.WeightKg = WeightKg;
-		Item.Rarity = Rarity;
-		Item.bIsEdible = bIsEdible;
-		Item.NutritionValue = NutritionValue;
-		Item.bIsFuel = bIsFuel;
-		Item.BurnDurationSeconds = BurnDurationSeconds;
-		Item.bCanBeProcessed = bCanBeProcessed;
-		if (ProcessingOutputItemId && ProcessingOutputItemId[0] != TEXT('\0'))
-		{
-			Item.ProcessingOutputItemId = FName(ProcessingOutputItemId);
-			Item.ProcessingOutputCount = ProcessingOutputCount;
-		}
-		Item.bIsTool = bIsTool;
-		Item.SortOrder = SortOrder;
-		Items.Add(Item);
-	};
-
-	AddItem(TEXT("Wood"), TEXT("Holz"), ESurvivalItemCategory::RawResource, TEXT("Ein brauchbares Stueck Holz fuer Bau, Feuer und einfache Verarbeitung."), 50, 1.20f, ESurvivalItemRarity::Common, false, 0, true, 90.0f, true, TEXT("WoodPlank"), 2, false, 100);
-	AddItem(TEXT("Branch"), TEXT("Ast"), ESurvivalItemCategory::RawResource, TEXT("Ein trockener Ast, der sich gut zu Stoecken weiterverarbeiten laesst."), 60, 0.20f, ESurvivalItemRarity::Common, false, 0, true, 25.0f, true, TEXT("Stick"), 1, false, 110);
-	AddItem(TEXT("Stone"), TEXT("Stein"), ESurvivalItemCategory::RawResource, TEXT("Ein harter Stein fuer einfache Werkzeuge, Feuerstellen und Bauplaetze."), 50, 0.80f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 120);
-	AddItem(TEXT("Flint"), TEXT("Feuerstein"), ESurvivalItemCategory::RawResource, TEXT("Scharfkantiger Stein fuer Klingen, Pfeilspitzen und Feuerstarter."), 50, 0.25f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 130);
-	AddItem(TEXT("Clay"), TEXT("Lehm"), ESurvivalItemCategory::RawResource, TEXT("Feuchtes Erdmaterial fuer spaetere Bau-, Ofen- und Keramiksysteme."), 100, 0.40f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 140);
-	AddItem(TEXT("Sand"), TEXT("Sand"), ESurvivalItemCategory::RawResource, TEXT("Feines Mineralmaterial fuer Bau, Gussformen und spaetere Glasverarbeitung."), 100, 0.20f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 150);
-	AddItem(TEXT("OreChunk"), TEXT("Erzbrocken"), ESurvivalItemCategory::RawResource, TEXT("Ein unsortierter Erzbrocken mit kleinen Metallanteilen."), 40, 1.10f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 160);
-	AddItem(TEXT("CopperOre"), TEXT("Kupfererz"), ESurvivalItemCategory::RawResource, TEXT("Kupferhaltiges Gestein, das in einem Ofen zu Barren geschmolzen werden kann."), 40, 1.30f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, true, TEXT("CopperIngot"), 1, false, 170);
-	AddItem(TEXT("IronOre"), TEXT("Eisenerz"), ESurvivalItemCategory::RawResource, TEXT("Eisenhaltiges Gestein fuer robuste Werkzeuge und Waffen."), 40, 1.50f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, true, TEXT("IronIngot"), 1, false, 180);
-
-	AddItem(TEXT("WoodPlank"), TEXT("Holzbrett"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein zugeschnittenes Brett fuer Bau- und Werkzeugteile."), 40, 0.70f, ESurvivalItemRarity::Common, false, 0, true, 60.0f, true, TEXT("WoodGrip"), 1, false, 200);
-	AddItem(TEXT("Stick"), TEXT("Stock"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein gerader Stock fuer Werkzeuge, Waffen und einfache Konstruktionen."), 60, 0.15f, ESurvivalItemRarity::Common, false, 0, true, 35.0f, false, nullptr, 1, false, 210);
-	AddItem(TEXT("Rope"), TEXT("Seil"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Geflochtenes Material zum Binden, Spannen und Verbinden."), 30, 0.25f, ESurvivalItemRarity::Common, false, 0, true, 20.0f, false, nullptr, 1, false, 220);
-	AddItem(TEXT("ClothScrap"), TEXT("Stofffetzen"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Kleine Stoffreste fuer Kleidung, Bandagen und leichte Reparaturen."), 50, 0.05f, ESurvivalItemRarity::Common, false, 0, true, 15.0f, false, nullptr, 1, false, 230);
-	AddItem(TEXT("Leather"), TEXT("Leder"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Gegerbtes Leder fuer Griffe, Ruestung und haltbare Ausruestung."), 20, 0.40f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 240);
-	AddItem(TEXT("CopperIngot"), TEXT("Kupferbarren"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein gegossener Kupferbarren fuer einfache Metallteile."), 20, 1.00f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 250);
-	AddItem(TEXT("IronIngot"), TEXT("Eisenbarren"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein stabiler Eisenbarren fuer Werkzeuge, Klingen und Beschlaege."), 20, 1.10f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, true, TEXT("Nail"), 6, false, 260);
-	AddItem(TEXT("Nail"), TEXT("Nagel"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein kleiner Eisenverbinder fuer Bau- und Reparaturrezepte."), 100, 0.03f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 270);
-	AddItem(TEXT("Coal"), TEXT("Kohle"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Dichter Brennstoff fuer Feuerstellen, Schmelzoefen und spaetere Maschinen."), 50, 0.40f, ESurvivalItemRarity::Common, false, 0, true, 300.0f, false, nullptr, 1, false, 280);
-	AddItem(TEXT("WoodGrip"), TEXT("Holzgriff"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein geformter Griff fuer Messer, Haken und feine Werkzeuge."), 25, 0.25f, ESurvivalItemRarity::Common, false, 0, true, 25.0f, false, nullptr, 1, false, 290);
-	AddItem(TEXT("IronHook"), TEXT("Eisenhaken"), ESurvivalItemCategory::ProcessedMaterial, TEXT("Ein gebogener Eisenhaken fuer Angel- und Mechanikrezepte."), 50, 0.08f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 300);
-
-	AddItem(TEXT("Feather"), TEXT("Feder"), ESurvivalItemCategory::NaturalMaterial, TEXT("Leichte Feder fuer Pfeile, Schmuck und feine Polsterung."), 100, 0.02f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 400);
-	AddItem(TEXT("Bone"), TEXT("Knochen"), ESurvivalItemCategory::NaturalMaterial, TEXT("Harter Knochen fuer Werkzeuge, Nadeln oder primitive Waffen."), 40, 0.30f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 410);
-	AddItem(TEXT("AnimalSinew"), TEXT("Tiersehne"), ESurvivalItemCategory::NaturalMaterial, TEXT("Zaehes Gewebe fuer Boegen, Bindungen und robuste Naehte."), 30, 0.08f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, false, 420);
-	AddItem(TEXT("Fur"), TEXT("Fell"), ESurvivalItemCategory::NaturalMaterial, TEXT("Warmes Fell fuer Kleidung, Lagerstaetten und Handel."), 20, 0.50f, ESurvivalItemRarity::Uncommon, false, 0, true, 30.0f, false, nullptr, 1, false, 430);
-	AddItem(TEXT("Resin"), TEXT("Harz"), ESurvivalItemCategory::NaturalMaterial, TEXT("Klebriges Harz fuer Kleber, Abdichtung und schnell entzuendliche Rezepte."), 30, 0.12f, ESurvivalItemRarity::Common, false, 0, true, 75.0f, false, nullptr, 1, false, 440);
-	AddItem(TEXT("PlantFiber"), TEXT("Pflanzenfaser"), ESurvivalItemCategory::NaturalMaterial, TEXT("Faseriges Pflanzenmaterial fuer Seile, Stoff und einfache Bindungen."), 60, 0.04f, ESurvivalItemRarity::Common, false, 0, true, 10.0f, true, TEXT("Rope"), 1, false, 450);
-
-	AddItem(TEXT("RawChickenMeat"), TEXT("Rohes Huehnerfleisch"), ESurvivalItemCategory::Food, TEXT("Rohes Fleisch. Essbar im Notfall, gekocht aber deutlich sicherer und nahrhafter."), 10, 0.35f, ESurvivalItemRarity::Common, true, 12, false, 0.0f, true, TEXT("CookedChickenMeat"), 1, false, 500);
-	AddItem(TEXT("CookedChickenMeat"), TEXT("Gebratenes Huehnerfleisch"), ESurvivalItemCategory::Food, TEXT("Durchgebratenes Fleisch mit gutem Naehrwert."), 10, 0.30f, ESurvivalItemRarity::Common, true, 35, false, 0.0f, false, nullptr, 1, false, 510);
-	AddItem(TEXT("RawFish"), TEXT("Roher Fisch"), ESurvivalItemCategory::Food, TEXT("Frischer roher Fisch. Gekocht als verlaessliche Nahrung nutzbar."), 10, 0.45f, ESurvivalItemRarity::Common, true, 10, false, 0.0f, true, TEXT("CookedFish"), 1, false, 520);
-	AddItem(TEXT("CookedFish"), TEXT("Gebratener Fisch"), ESurvivalItemCategory::Food, TEXT("Gebratener Fisch mit leichtem Gewicht und gutem Naehrwert."), 10, 0.40f, ESurvivalItemRarity::Common, true, 30, false, 0.0f, false, nullptr, 1, false, 530);
-	AddItem(TEXT("Berries"), TEXT("Beeren"), ESurvivalItemCategory::Food, TEXT("Essbare Waldbeeren fuer schnelle Energie unterwegs."), 25, 0.05f, ESurvivalItemRarity::Common, true, 8, false, 0.0f, false, nullptr, 1, false, 540);
-	AddItem(TEXT("Mushrooms"), TEXT("Pilze"), ESurvivalItemCategory::Food, TEXT("Sammelbare Pilze fuer Nahrung und spaetere Kochrezepte."), 20, 0.06f, ESurvivalItemRarity::Common, true, 10, false, 0.0f, false, nullptr, 1, false, 550);
-	AddItem(TEXT("Water"), TEXT("Wasser"), ESurvivalItemCategory::Food, TEXT("Trinkbares Wasser. Stillt Durst, liefert aber keinen Naehrwert."), 10, 1.00f, ESurvivalItemRarity::Common, true, 0, false, 0.0f, false, nullptr, 1, false, 560);
-
-	if (FItemDef* Water = Items.FindByPredicate([](const FItemDef& Item) { return Item.ItemId == TEXT("Water"); }))
-	{
-		Water->HydrationValue = 45;
-	}
-
-	AddItem(TEXT("Bow"), TEXT("Bogen"), ESurvivalItemCategory::Tool, TEXT("Ein einfacher Bogen fuer Jagd und Verteidigung."), 1, 1.00f, ESurvivalItemRarity::Uncommon, false, 0, true, 60.0f, false, nullptr, 1, true, 700);
-	AddItem(TEXT("Arrow"), TEXT("Pfeil"), ESurvivalItemCategory::Tool, TEXT("Ein leichter Pfeil fuer Boegen."), 40, 0.05f, ESurvivalItemRarity::Common, false, 0, true, 5.0f, false, nullptr, 1, false, 710);
-	AddItem(TEXT("Axe"), TEXT("Axt"), ESurvivalItemCategory::Tool, TEXT("Ein einfaches Werkzeug zum Faellen von Baeumen und Bearbeiten von Holz."), 1, 1.60f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, true, 720);
-	AddItem(TEXT("Pickaxe"), TEXT("Spitzhacke"), ESurvivalItemCategory::Tool, TEXT("Ein Werkzeug zum Abbauen von Stein und Erz."), 1, 2.20f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, true, 730);
-	AddItem(TEXT("Campfire"), TEXT("Lagerfeuer"), ESurvivalItemCategory::Building, TEXT("Eine platzierbare Feuerstelle fuer Licht, Waerme und Kochen."), 1, 4.00f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, false, 740);
-	AddItem(TEXT("IronKnife"), TEXT("Eisenmesser"), ESurvivalItemCategory::Tool, TEXT("Eine haltbare Klinge fuer Jagd und Verarbeitung."), 1, 0.70f, ESurvivalItemRarity::Uncommon, false, 0, false, 0.0f, false, nullptr, 1, true, 750);
-	AddItem(TEXT("FishingRod"), TEXT("Angel"), ESurvivalItemCategory::Tool, TEXT("Ein Werkzeug zum Angeln an geeigneten Wasserstellen."), 1, 0.80f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, true, 760);
-	AddItem(TEXT("StoneBlade"), TEXT("Steinklinge"), ESurvivalItemCategory::Tool, TEXT("Eine primitive Klinge aus Stein fuer fruehe Verarbeitung."), 10, 0.20f, ESurvivalItemRarity::Common, false, 0, false, 0.0f, false, nullptr, 1, true, 770);
-
-	return Items;
+	DOREPLIFETIME(UCraftingComponent, CraftingInputSlots);
+	DOREPLIFETIME(UCraftingComponent, UnlockedRecipeIds);
+	DOREPLIFETIME(UCraftingComponent, ActiveCraftingStation);
+	DOREPLIFETIME(UCraftingComponent, ActiveRecipeId);
+	DOREPLIFETIME(UCraftingComponent, ActiveRecipeElapsedSeconds);
+	DOREPLIFETIME(UCraftingComponent, ActiveRecipeTotalSeconds);
+	DOREPLIFETIME(UCraftingComponent, LastCraftingMessage);
+	DOREPLIFETIME(UCraftingComponent, bLastCraftingMessageIsError);
 }

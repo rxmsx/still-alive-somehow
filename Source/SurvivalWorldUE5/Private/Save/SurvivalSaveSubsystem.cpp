@@ -61,6 +61,9 @@ bool USurvivalSaveSubsystem::SaveCurrentWorld(const FString& SlotName, int32 Use
 			if (const UInventoryComponent* Inventory = Pawn->FindComponentByClass<UInventoryComponent>())
 			{
 				SaveGame->InventorySnapshot = Inventory->GetSnapshot();
+				SaveGame->InventorySlotSnapshot = Inventory->GetSlotSnapshot();
+				SaveGame->HotbarSlotSnapshot = Inventory->GetHotbarSnapshot();
+				SaveGame->EquippedSlotIndex = Inventory->GetEquippedSlotIndex();
 			}
 		}
 	}
@@ -128,7 +131,14 @@ bool USurvivalSaveSubsystem::LoadCurrentWorld(const FString& SlotName, int32 Use
 			}
 			if (UInventoryComponent* Inventory = Pawn->FindComponentByClass<UInventoryComponent>())
 			{
-				Inventory->SetSnapshot(LastLoadedSave->InventorySnapshot);
+				if (LastLoadedSave->InventorySlotSnapshot.Num() > 0)
+				{
+					Inventory->SetSlotSnapshot(LastLoadedSave->InventorySlotSnapshot, LastLoadedSave->HotbarSlotSnapshot, LastLoadedSave->EquippedSlotIndex);
+				}
+				else
+				{
+					Inventory->SetSnapshot(LastLoadedSave->InventorySnapshot);
+				}
 			}
 		}
 	}

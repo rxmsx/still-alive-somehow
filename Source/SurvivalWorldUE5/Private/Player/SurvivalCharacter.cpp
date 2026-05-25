@@ -276,6 +276,16 @@ void ASurvivalCharacter::AddStarterItems()
 
 	InventoryComponent->AddItem(FName(TEXT("Axe")), 1);
 	InventoryComponent->AddItem(FName(TEXT("Pickaxe")), 1);
+	InventoryComponent->AddItem(FName(TEXT("Wood")), 3);
+	InventoryComponent->AddItem(FName(TEXT("Stone")), 6);
+	InventoryComponent->AddItem(FName(TEXT("Stick")), 4);
+	InventoryComponent->AddItem(FName(TEXT("PlantFiber")), 8);
+	InventoryComponent->AddItem(FName(TEXT("Rope")), 2);
+	InventoryComponent->AddItem(FName(TEXT("Cloth")), 3);
+	InventoryComponent->AddItem(FName(TEXT("RawMeat")), 2);
+	InventoryComponent->AddItem(FName(TEXT("DirtyWater")), 2);
+	InventoryComponent->AddItem(FName(TEXT("Alcohol")), 1);
+	InventoryComponent->AddItem(FName(TEXT("Hide")), 2);
 }
 
 void ASurvivalCharacter::RefreshMovementSpeed()
